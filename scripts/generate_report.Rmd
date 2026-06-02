@@ -1,0 +1,735 @@
+---
+title: "Bulkseq 自动化分析报告"
+subtitle: "`r params$project_id`"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    latex_engine: xelatex
+    keep_tex: true
+header-includes:
+  - \usepackage{xeCJK}
+  - \usepackage{times}
+  - \setCJKmainfont{Noto Serif CJK SC}
+  - \setCJKmonofont{Noto Sans CJK SC}
+  - \usepackage{titlesec}
+  - \usepackage{xcolor}
+  - \usepackage{caption}
+  - \usepackage{float}
+  - \titleformat{\section}{\huge\bfseries}{\thesection}{1em}{}
+  - \titlespacing*{\section}{0pt}{2.5ex plus 1ex minus .2ex}{1.5ex plus .2ex}
+  - \titleformat{\subsection}{\Large\bfseries}{\thesubsection}{1em}{}
+  - \titlespacing*{\subsection}{0pt}{2ex plus .5ex minus .2ex}{1ex plus .2ex}
+  - \titleformat{\subsubsection}{\large\bfseries}{\thesubsubsection}{1em}{}
+  - \titlespacing*{\subsubsection}{0pt}{1.5ex plus .5ex minus .2ex}{0.5ex plus .2ex}
+  - '\captionsetup{font={small,it}, labelfont=bf, justification=raggedright, singlelinecheck=false, margin=10pt}'
+  - '\newcommand{\reportfig}[3]{\begin{center}\includegraphics[width=#1]{#2}\par\vspace{0.3em}{\small\itshape  #3}\end{center}\par}'
+params:
+  project_dir: ""
+  project_id: ""
+  mode: "counts"
+  species: "human"
+  comparisons: ""
+  comparison_mode: "auto"
+  exclude_samples: ""
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+  fig.align = "center", fig.pos = "H")
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+
+proj_dir     <- params$project_dir
+proj_id      <- params$project_id
+mode         <- params$mode
+species      <- params$species
+comp_mode    <- params$comparison_mode
+
+# 解析比较列表和排除样本
+comps_raw    <- if (nchar(params$comparisons) > 0) unlist(strsplit(params$comparisons, ",")) else character(0)
+exclude_raw  <- if (nchar(params$exclude_samples) > 0) unlist(strsplit(params$exclude_samples, ",")) else character(0)
+
+# Safe CSV reader: returns NULL on empty or malformed files
+safe_read_csv <- function(path) {
+  if (!file.exists(path) || file.info(path)$size < 10) return(NULL)
+  tryCatch(read.csv(path, stringsAsFactors = FALSE), error = function(e) NULL)
+}
+
+# 格式化比较标签: "AB3_vs_SC" → "AB3 VS SC"
+fmt_comparison <- function(comp) {
+  parts <- strsplit(comp, "_vs_")[[1]]
+  if (length(parts) == 2) {
+    paste0(parts[1], " VS ", parts[2])
+  } else {
+    comp
+  }
+}
+
+# Select OrgDb based on species
+if (species == "human") {
+  orgdb <- "org.Hs.eg.db"
+} else if (species == "mouse") {
+  orgdb <- "org.Mm.eg.db"
+} else if (species == "rat") {
+  orgdb <- "org.Rn.eg.db"
+} else {
+  orgdb <- "org.Hs.eg.db"
+}
+
+# Shorten sample names: E260417001_L01_con1-1 → con1-1
+short_name <- function(x) gsub("^.*_", "", x)
+
+# Load sample info (prefer filtered)
+sample_file <- file.path(proj_dir, "04_Counts", "sample_sheet_filtered.csv")
+if (!file.exists(sample_file)) {
+  sample_file <- file.path(proj_dir, "sample_sheet.csv")
+}
+has_sample_info <- file.exists(sample_file)
+if (has_sample_info) {
+  sample_info <- read.csv(sample_file, stringsAsFactors = FALSE)
+}
+
+# Load TPM for PCA and correlation (prefer batch-corrected > filtered > raw)
+tpm_file <- file.path(proj_dir, "04_Counts", paste0(proj_id, "_tpm_batch_corrected.xls"))
+tpm_source <- "batch-corrected"
+if (!file.exists(tpm_file)) {
+  tpm_file <- file.path(proj_dir, "04_Counts", paste0(proj_id, "_tpm_filtered.xls"))
+  tpm_source <- "filtered"
+  if (!file.exists(tpm_file)) {
+    tpm_file <- file.path(proj_dir, "04_Counts", paste0(proj_id, "_tpm.xls"))
+    tpm_source <- "raw"
+  }
+}
+has_tpm <- file.exists(tpm_file)
+if (has_tpm) {
+  tpm <- read.table(tpm_file, header = TRUE, sep = "\t", row.names = 1, check.names = FALSE)
+  if ("Length" %in% colnames(tpm)) tpm <- tpm[, !colnames(tpm) %in% "Length", drop = FALSE]
+}
+
+n_samples <- if (has_tpm) ncol(tpm) else 0
+```
+
+\newpage
+
+# 1. 分析流程
+
+```{r overview-desc, results='asis'}
+cat(sprintf("**项目ID**: %s\n\n", proj_id))
+cat(sprintf("**分析日期**: %s\n\n", Sys.Date()))
+if (mode == "fastq") {
+  cat("**分析模式**: 完整流程 — 从 FASTQ 原始数据出发，经质控、比对、定量、差异分析、富集分析，最终生成 PDF 报告。\n\n")
+  cat("**主要步骤**: fastp 质控 → FastQC 评估 → HISAT2 比对 → featureCounts 定量 → DESeq2 差异分析 → clusterProfiler 富集分析\n\n")
+} else {
+  cat("**分析模式**: 下游分析 — 基于已有的 counts 定量矩阵，进行差异分析、富集分析并生成 PDF 报告。\n\n")
+  cat("**主要步骤**: 定量矩阵标准化 → DESeq2 差异分析 → clusterProfiler 富集分析\n\n")
+}
+
+if (length(comps_raw) > 0) {
+  cat(sprintf("**比较模式**: %s\n\n", comp_mode))
+  cat("**比较方案**:\n\n")
+  for (comp in comps_raw) {
+    cat(sprintf("- %s\n\n", fmt_comparison(comp)))
+  }
+}
+
+if (length(exclude_raw) > 0) {
+  cat(sprintf("\n**已剔除样本**: %s\n\n", paste(exclude_raw, collapse = ", ")))
+}
+```
+
+\newpage
+
+# 2. 样本质控与比对
+
+```{r qc-desc, results='asis'}
+cat("## 2.1 数据预处理与比对方法\n\n")
+cat("原始 FASTQ 数据使用 **fastp** 进行预处理，主要包括：(1) 自动识别并移除测序接头序列；")
+cat("(2) 由于测序仪前 15 bp 读取信号不稳定，切除每条 read 前 15 bp 的碱基；")
+cat("(3) 去除低质量碱基（Q < 20）。质控后的 clean reads 使用 **HISAT2** 比对到参考基因组，")
+cat("再通过 **featureCounts** 对每个基因进行 reads 计数定量。\n\n")
+```
+
+```{r load-mapping-data}
+summary_file <- file.path(proj_dir, "total_mapping_summary.txt")
+has_summary <- file.exists(summary_file)
+
+fc_summary_file <- file.path(proj_dir, "04_Counts", "counts.txt.summary")
+if (!file.exists(fc_summary_file)) {
+  fc_summary_file <- file.path(proj_dir, "04_Counts", "counts_filtered.txt.summary")
+}
+has_fc <- file.exists(fc_summary_file)
+
+if (has_summary && has_fc) {
+  mapping_data <- read.table(summary_file, header = TRUE, stringsAsFactors = FALSE, fill = TRUE, na.strings = "")
+  mapping_data <- mapping_data[!is.na(mapping_data$HISAT2_Mapping_Rate), ]
+  colnames(mapping_data) <- c("SampleID", "HISAT2_Mapping_Rate")
+  mapping_data$ShortName <- short_name(mapping_data$SampleID)
+
+  fc_summary <- read.table(fc_summary_file, header = TRUE, stringsAsFactors = FALSE, check.names = FALSE)
+  fc_summary <- fc_summary[!grepl("^#", fc_summary[[1]]), ]
+  categories <- fc_summary[[1]]
+  fc_values <- fc_summary[, -1, drop = FALSE]
+  fc_t <- as.data.frame(t(fc_values))
+  colnames(fc_t) <- categories
+  fc_t$Sample <- gsub("^.*/|\\.sorted\\.bam$", "", rownames(fc_t))
+
+  keep_cols <- intersect(c("Assigned", "Unassigned_Unmapped", "Unassigned_MultiMapping",
+                           "Unassigned_NoFeatures", "Unassigned_Ambiguity"), colnames(fc_t))
+  fc_sub <- fc_t[, c("Sample", keep_cols), drop = FALSE]
+  for (col in keep_cols) fc_sub[[col]] <- as.numeric(fc_sub[[col]])
+  fc_sub$Total <- rowSums(fc_sub[, keep_cols, drop = FALSE], na.rm = TRUE)
+  fc_sub$AssignRate <- fc_sub$Assigned / fc_sub$Total * 100
+  fc_sub$FeatureCount_Assignment_Rate <- sprintf("%.1f%%", fc_sub$AssignRate)
+  fc_sub$ShortName <- short_name(fc_sub$Sample)
+
+  combined <- merge(mapping_data[, c("ShortName", "HISAT2_Mapping_Rate")],
+                    fc_sub[, c("ShortName", "FeatureCount_Assignment_Rate")],
+                    by = "ShortName", all = TRUE)
+  combined <- combined[order(tolower(combined$ShortName)), ]
+  colnames(combined)[1] <- "SampleID"
+}
+```
+
+```{r combined-table-head, results='asis'}
+if (has_summary && has_fc) {
+  cat("## 2.2 比对与定量统计\n\n")
+  cat("下表汇总了每个样本的 HISAT2 比对率及 featureCounts 基因匹配率：\n\n")
+}
+```
+
+```{r combined-table}
+if (has_summary && has_fc) {
+  kable(combined, row.names = FALSE, align = 'c')
+} else if (has_summary) {
+  mapping_data <- read.table(summary_file, header = TRUE, stringsAsFactors = FALSE, fill = TRUE, na.strings = "")
+  mapping_data <- mapping_data[!is.na(mapping_data$HISAT2_Mapping_Rate), ]
+  mapping_data$SampleID <- short_name(mapping_data$SampleID)
+  kable(mapping_data, row.names = FALSE, align = 'c')
+} else {
+  cat("无比对统计信息。\n")
+}
+```
+
+```{r fc-bar-head, results='asis'}
+```
+
+```{r fc-bar, fig.width=10, fig.height=5, out.width='\\textwidth', fig.cap="图 2-1: featureCounts 基因匹配比例。各样本中 reads 的分类占比 (Assigned / Unmapped / MultiMapping / NoFeatures / Ambiguity)，条形高度按比例堆叠，横轴为比例，纵轴为样本名称。"}
+if (has_fc && exists("fc_sub") && nrow(fc_sub) > 0) {
+  bar_data <- fc_sub %>%
+    select(ShortName, any_of(c("Assigned", "Unassigned_Unmapped",
+           "Unassigned_MultiMapping", "Unassigned_NoFeatures",
+           "Unassigned_Ambiguity"))) %>%
+    pivot_longer(-ShortName, names_to = "Category", values_to = "Reads") %>%
+    mutate(Category = gsub("^Unassigned_", "", Category))
+
+  bar_data$ShortName <- factor(bar_data$ShortName,
+    levels = rev(sort(unique(bar_data$ShortName))))
+
+  cat_colors <- c(
+    "Assigned"         = "#4575b4",
+    "Unmapped"         = "#fc8d59",
+    "MultiMapping"     = "#91bfdb",
+    "NoFeatures"       = "#d73027",
+    "Ambiguity"        = "#fee090"
+  )
+  existing_cats <- unique(bar_data$Category)
+  use_colors <- cat_colors[names(cat_colors) %in% existing_cats]
+
+  ggplot(bar_data, aes(x = Reads, y = ShortName, fill = Category)) +
+    geom_bar(stat = "identity", position = "fill", width = 0.7) +
+    scale_fill_manual(values = use_colors) +
+    scale_x_continuous(labels = function(x) paste0(round(x * 100), "%")) +
+    theme_minimal() +
+    theme(
+      panel.grid.major.y = element_blank(),
+      panel.grid.minor = element_blank(),
+      plot.title = element_text(face = "bold"),
+      legend.position = "bottom"
+    ) +
+    labs(x = "Proportion", y = "", fill = "")
+}
+```
+
+\newpage
+
+# 3. 定量结果
+
+```{r counts-desc, results='asis'}
+cat("## 3.1 标准化方法\n\n")
+cat("featureCounts 输出的原始 counts 矩阵通过以下两种方式进行标准化：\n\n")
+cat("- **FPKM (Fragments Per Kilobase per Million mapped reads)**：考虑了基因长度和测序深度的双重校正。")
+cat("计算公式为：FPKM = (counts × 10^9) / (gene_length × total_mapped_reads)。\n\n")
+cat("- **TPM (Transcripts Per Million)**：在 FPKM 基础上进一步消除了样本间总表达量的差异，")
+cat("使各样本的 TPM 总和一致，更适用于样本间的表达量比较。")
+cat("计算步骤：先计算每个基因的 reads-per-kilobase (RPK)，再将 RPK 除以所有 RPK 之和乘以 10^6。\n\n")
+```
+
+```{r counts-load}
+counts_file <- file.path(proj_dir, "04_Counts", paste0(proj_id, "_counts_filtered.xls"))
+if (!file.exists(counts_file)) {
+  counts_file <- file.path(proj_dir, "04_Counts", paste0(proj_id, "_counts.xls"))
+}
+has_counts <- file.exists(counts_file)
+if (has_counts) {
+  counts <- read.table(counts_file, header = TRUE, sep = "\t", row.names = 1, check.names = FALSE)
+  if ("Length" %in% colnames(counts)) counts <- counts[, !colnames(counts) %in% "Length", drop = FALSE]
+}
+```
+
+```{r counts-stats, results='asis'}
+if (has_counts) {
+  cat(sprintf("## 3.2 表达矩阵概览\n\n"))
+  cat(sprintf("定量基因总数: \\textcolor{red}{%d}\n\n", nrow(counts)))
+  cat(sprintf("样本总数: \\textcolor{red}{%d}\n\n", ncol(counts)))
+}
+```
+
+```{r counts-boxplot, fig.width=10, fig.height=5, out.width='\\textwidth', fig.cap="图 3-1: log2(Counts+1) 表达量分布。各样本基因表达水平的箱线图，横轴为样本名称，纵轴为 log2(Counts+1)。若各样本箱体位置和范围相近，说明样本间可比性较好，适合进行差异分析。"}
+if (has_counts) {
+  log_counts <- log2(counts + 1)
+  colnames(log_counts) <- short_name(colnames(log_counts))
+  par(mar = c(8, 4, 2, 1))
+  boxplot(log_counts, las = 2, cex.axis = 0.7,
+          ylab = "log2(Counts+1)", col = "#7fc97f")
+}
+```
+
+\newpage
+
+# 4. 相关性分析
+
+```{r pca-method, results='asis'}
+cat("## 4.1 PCA 降维分析\n\n")
+cat("主成分分析 (Principal Component Analysis, PCA) 用于评估样本间的整体相似性和批次效应。")
+cat("本分析基于 **TPM 标准化表达矩阵**，过滤低表达基因（mean TPM > 1）后取 log2(TPM + 1) 变换，")
+cat("使用 **prcomp** 进行 PCA 降维。")
+cat("PCA 将高维基因表达数据投影到低维空间，前两个主成分 (PC1, PC2) 捕获了数据中最主要的变异来源。\n\n")
+cat("**预期结果**：同一分组的生物学重复样本应在 PCA 图中聚集在一起；")
+cat("不同分组的样本应在某一主成分方向上分离，表明该主成分反映了组间生物学差异。\n\n")
+if (tpm_source == "batch-corrected") {
+  cat("\n\n> **注意**: 本 PCA 图基于 **limma::removeBatchEffect 批次校正后** 的 TPM 数据生成，已移除已知批次效应，")
+  cat("用于更清晰地展示组间生物学差异。\n\n")
+}
+```
+
+```{r pca-plot, fig.width=8, fig.height=6, out.width='\\textwidth', fig.cap="图 4-1: PCA 降维分析图。每个点代表一个样本，颜色区分分组，椭圆为 95\\% 置信区间。横轴为 PC1，纵轴为 PC2，括号中标注各主成分解释的方差百分比。同一分组的样本应聚集，不同分组应在某主成分方向上分离。"}
+if (has_tpm && has_sample_info) {
+  tpm_filt <- tpm[rowMeans(tpm) > 1, ]
+  log_tpm <- log2(tpm_filt + 1)
+  colnames(log_tpm) <- short_name(colnames(log_tpm))
+
+  pca_res <- prcomp(t(log_tpm), scale. = TRUE)
+  pca_var <- round(summary(pca_res)$importance[2, 1:2] * 100, 1)
+
+  pca_df <- data.frame(
+    PC1 = pca_res$x[, 1],
+    PC2 = pca_res$x[, 2],
+    Sample = colnames(log_tpm)
+  )
+
+  sample_info$Sample <- short_name(sample_info$sample)
+  pca_df <- merge(pca_df, sample_info[, c("Sample", "group")], by = "Sample", all.x = TRUE)
+
+  ggplot(pca_df, aes(x = PC1, y = PC2, color = group, label = Sample)) +
+    geom_point(size = 4) +
+    geom_text(vjust = -1, size = 3, show.legend = FALSE) +
+    stat_ellipse(level = 0.95, linewidth = 1) +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(face = "bold"),
+      legend.position = "bottom"
+    ) +
+    labs(
+      x = sprintf("PC1 (%s%%)", pca_var[1]),
+      y = sprintf("PC2 (%s%%)", pca_var[2]),
+      color = "Group"
+    )
+}
+```
+
+```{r pca-result-text, results='asis'}
+if (has_tpm && has_sample_info) {
+  cat("\n\n**PCA 结果**：如 PCA 图所示，同一组别的重复样本在 PC1/PC2 空间中趋于聚集，")
+  cat("不同组别间表现出明显的分离趋势。这表明组间生物学差异是数据中最主要的变异来源，")
+  cat("实验重复性良好，适合进行后续的差异表达分析。\n\n")
+}
+```
+
+```{r corr-method, results='asis'}
+cat("\n\n## 4.2 样本相关性分析\n\n")
+cat("样本间相关性分析用于评估生物学重复的一致性和组间差异的可靠性。")
+cat("基于 **TPM 标准化表达矩阵**，过滤低表达基因（mean TPM > 1）后取 log2(TPM + 1) 变换，")
+cat("计算样本间的 **Pearson 相关系数**。\n\n")
+cat("**预期结果**：同一分组的生物学重复样本间应有较高的相关系数（通常 r > 0.90），")
+cat("不同分组样本间的相关性相对较低。聚类树的分支结构应反映样本的分组关系。\n\n")
+if (tpm_source == "batch-corrected") {
+  cat("\n\n> **注意**: 本相关性分析基于 **批次校正后** 的 TPM 数据，已移除已知批次效应。\n\n")
+}
+cat("\n\n")
+```
+
+```{r corr-heatmap, fig.width=8, fig.height=7, out.width='\\textwidth', fig.cap="图 4-2: 样本相关性热图。色块颜色深浅表示 Pearson 相关系数 (深红 = 高相关，浅色 = 低相关)，行和列按层次聚类排序。期望同一分组样本间呈现深红色块 (高相关)。"}
+if (has_tpm) {
+  tpm_filt <- tpm[rowMeans(tpm) > 1, ]
+  log_tpm <- log2(tpm_filt + 1)
+  colnames(log_tpm) <- short_name(colnames(log_tpm))
+
+  cor_matrix <- cor(log_tpm, method = "pearson")
+  cor_df <- as.data.frame(as.table(cor_matrix))
+  colnames(cor_df) <- c("Sample1", "Sample2", "Correlation")
+
+  hc <- hclust(as.dist(1 - cor_matrix))
+  sample_order <- hc$labels[hc$order]
+  cor_df$Sample1 <- factor(cor_df$Sample1, levels = sample_order)
+  cor_df$Sample2 <- factor(cor_df$Sample2, levels = sample_order)
+
+  p_cor <- ggplot(cor_df, aes(x = Sample1, y = Sample2, fill = Correlation)) +
+    geom_tile(color = "white", linewidth = 0.5) +
+    {if (n_samples <= 15) geom_text(aes(label = sprintf("%.2f", Correlation)), size = 3.5)} +
+    scale_fill_gradient2(low = "#67a9cf", mid = "white", high = "#ef8a62",
+                         midpoint = min(cor_matrix) + (max(cor_matrix) - min(cor_matrix)) / 2,
+                         limits = c(min(cor_matrix), 1)) +
+    coord_fixed() +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      panel.grid = element_blank(),
+      plot.title = element_text(face = "bold")
+    ) +
+    labs(x = "", y = "", fill = "Correlation")
+  print(p_cor)
+}
+```
+
+```{r corr-result-text, results='asis'}
+if (has_tpm) {
+  if (has_sample_info) {
+    sn <- short_name(sample_info$sample)
+    groups <- sample_info$group[match(colnames(log_tpm), sn)]
+
+    within_cor <- c()
+    between_cor <- c()
+    for (i in 1:(ncol(log_tpm) - 1)) {
+      for (j in (i + 1):ncol(log_tpm)) {
+        r_val <- cor_matrix[i, j]
+        if (groups[i] == groups[j]) {
+          within_cor <- c(within_cor, r_val)
+        } else {
+          between_cor <- c(between_cor, r_val)
+        }
+      }
+    }
+
+    cat("\n\n**相关性结果**：\n\n")
+    cat(sprintf("- 组内 (同一分组) 平均 Pearson 相关系数: **%.3f** (范围: %.3f – %.3f)\n\n",
+        mean(within_cor), min(within_cor), max(within_cor)))
+    cat(sprintf("- 组间 (不同分组) 平均 Pearson 相关系数: **%.3f** (范围: %.3f – %.3f)\n\n",
+        mean(between_cor), min(between_cor), max(between_cor)))
+    if (mean(within_cor) > mean(between_cor)) {
+      cat("组内相关性高于组间相关性，表明生物学重复一致性良好，组间差异可信。\n\n")
+    }
+  }
+}
+```
+
+\newpage
+
+# 5. 差异表达分析 (DEG)
+
+```{r deg-method, results='asis'}
+if (has_sample_info) {
+  grps <- unique(sample_info$group)
+  if (length(grps) >= 2) {
+    cat("## 5.1 分析方法\n\n")
+    cat(sprintf("差异表达分析使用 **DESeq2** 包完成。输入文件为 featureCounts 生成的原始 **counts 矩阵**"))
+    cat(sprintf("及样本分组信息表 (sample_sheet.csv)。比较模式为 **%s**。\n\n", comp_mode))
+    cat("差异基因筛选标准：**|log2(FoldChange)| > 0.5** 且 **adjusted p-value (padj) < 0.05**。")
+    cat("DESeq2 使用负二项分布模型对 counts 数据进行建模，通过 empirical Bayes 收缩估计离散度，")
+    cat("并使用 Wald 检验评估每个基因在组间的表达差异显著性。\n\n")
+    # Check if batch was used in DESeq2 design
+    sample_info_file <- file.path(proj_dir, "04_Counts", "sample_sheet_filtered.csv")
+    if (file.exists(sample_info_file)) {
+      si <- read.csv(sample_info_file, stringsAsFactors = FALSE)
+      if ("batch" %in% colnames(si)) {
+        cat("**批次校正**: DESeq2 设计公式包含 **batch 协变量** (`~ batch + group`)，以在差异分析中校正已知批次效应。\n\n")
+      }
+    }
+  }
+}
+```
+
+```{r deg-results, results='asis', fig.width=10, fig.height=6, out.width='\\textwidth', fig.cap="图 5-1: 差异基因统计柱状图。各比较组上调和下调基因的数量对比，红色柱表示上调 (UP)，蓝色柱表示下调 (DOWN)，横轴为基因数量，纵轴为比较组名称。"}
+deg_dir <- file.path(proj_dir, "05_DEG")
+has_deg_dir <- dir.exists(deg_dir)
+
+# Build per-comparison DEG summary
+deg_summary <- list()
+has_any_deg <- FALSE
+
+if (has_deg_dir && length(comps_raw) > 0) {
+  for (comp in comps_raw) {
+    csv_file <- file.path(deg_dir, paste0(proj_id, "_", comp, "_Diff.csv"))
+    if (file.exists(csv_file)) {
+      diff <- read.csv(csv_file, stringsAsFactors = FALSE)
+      n_up <- sum(diff$change == "UP")
+      n_down <- sum(diff$change == "DOWN")
+      deg_summary[[comp]] <- list(up = n_up, down = n_down, total = n_up + n_down)
+      has_any_deg <- TRUE
+    }
+  }
+}
+
+if (has_any_deg) {
+  cat("## 5.2 差异基因统计\n\n")
+
+  # DEG bar chart
+  bar_df <- data.frame(
+    Comparison = character(0),
+    Direction = character(0),
+    Count = integer(0),
+    stringsAsFactors = FALSE
+  )
+  for (comp in names(deg_summary)) {
+    s <- deg_summary[[comp]]
+    label <- fmt_comparison(comp)
+    bar_df <- rbind(bar_df, data.frame(Comparison = label, Direction = "UP", Count = s$up))
+    bar_df <- rbind(bar_df, data.frame(Comparison = label, Direction = "DOWN", Count = s$down))
+  }
+  bar_df$Direction <- factor(bar_df$Direction, levels = c("UP", "DOWN"))
+  bar_df$Comparison <- factor(bar_df$Comparison, levels = rev(unique(bar_df$Comparison)))
+
+
+  p_bar <- ggplot(bar_df, aes(x = Count, y = Comparison, fill = Direction)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = Count), position = position_dodge(0.7), hjust = -0.2, size = 3) +
+    scale_fill_manual(values = c("UP" = "#ef8a62", "DOWN" = "#67a9cf")) +
+    theme_minimal() +
+    theme(
+      panel.grid.major.y = element_blank(),
+      plot.title = element_text(face = "bold"),
+      legend.position = "bottom"
+    ) +
+    labs(x = "Gene Count", y = "", fill = "")
+
+  print(p_bar)
+
+  cat("\n\n")
+  for (comp in names(deg_summary)) {
+    s <- deg_summary[[comp]]
+    cat(sprintf("**%s**：上调 \\textcolor{red}{%d} 个，下调 \\textcolor{red}{%d} 个，合计 \\textcolor{red}{%d} 个\n\n",
+        fmt_comparison(comp), s$up, s$down, s$total))
+  }
+}
+```
+
+```{r deg-per-comparison, results='asis', out.width='\\textwidth'}
+if (has_any_deg) {
+  fig_num <- 2  # 5-1 is the DEG stats bar chart
+  for (comp in comps_raw) {
+    comp_label <- fmt_comparison(comp)
+
+    cat(sprintf("\n\\newpage\n\n### %s\n\n", comp_label))
+
+    # Volcano
+    volcano_png <- file.path(deg_dir, paste0("Fig_Volcano_", comp, ".png"))
+    volcano_pdf <- file.path(deg_dir, paste0("Fig_Volcano_", comp, ".pdf"))
+    if (file.exists(volcano_png)) {
+      cat(sprintf("\\reportfig{\\textwidth}{%s}{图 5-%d: %s 火山图。横轴为 log2(FoldChange)，纵轴为 -log10(padj)。红点表示上调基因 (UP)，蓝点表示下调基因 (DOWN)，灰点表示无显著差异基因 (NOT)。}\n\n",
+          volcano_png, fig_num, comp_label))
+      fig_num <- fig_num + 1
+    }
+
+    # Heatmap
+    heatmap_png <- file.path(deg_dir, paste0("Fig_Heatmap_", comp, ".png"))
+    if (file.exists(heatmap_png)) {
+      cat(sprintf("\\reportfig{\\textwidth}{%s}{图 5-%d: %s 差异基因热图。对 Top 50 显著差异基因的表达量 (VST) 进行 Z-score 标准化后绘制。色标从蓝 (低表达) 到红 (高表达)，列为样本名称，行为基因名称。}\n\n",
+          heatmap_png, fig_num, comp_label))
+      fig_num <- fig_num + 1
+    }
+  }
+}
+```
+
+\newpage
+
+# 6. GO / KEGG 富集分析
+
+```{r enrich-method, results='asis'}
+cat("## 6.1 分析方法\n\n")
+cat("使用各组比较鉴定到的差异基因分别进行 GO 和 KEGG 富集分析。")
+cat("富集分析使用 **clusterProfiler** 包完成，通过超几何分布检验评估每个功能条目中差异基因的富集显著性。\n\n")
+cat("**分析参数**：\n\n")
+cat(sprintf("- 基因 ID 转换：SYMBOL → ENTREZID（%s）\n\n", orgdb))
+cat("- 多重检验校正：Benjamini-Hochberg (BH) 方法\n\n")
+cat("- 显著性阈值：p.adjust < 0.05\n\n")
+```
+
+```{r enrich-per-comparison, results='asis', out.width='\\textwidth'}
+enrich_dir <- file.path(proj_dir, "06_GO_KEGG")
+has_enrich_dir <- dir.exists(enrich_dir) && !file.exists(file.path(enrich_dir, "SKIPPED"))
+
+if (has_enrich_dir && length(comps_raw) > 0) {
+  cat("## 6.2 富集结果\n\n")
+  cat("对每个比较的上调基因和下调基因分别进行 GO 和 KEGG 富集分析。\n\n")
+
+  fig_num <- 1
+  for (comp in comps_raw) {
+    comp_label <- fmt_comparison(comp)
+    cat(sprintf("\n### %s\n\n", comp_label))
+
+    for (direction in c("UP", "DOWN")) {
+      dir_label <- if (direction == "UP") "上调基因" else "下调基因"
+
+      go_file <- file.path(enrich_dir, paste0(comp, "_", direction, "_GO_enrich_results.csv"))
+      kegg_file <- file.path(enrich_dir, paste0(comp, "_", direction, "_KEGG_enrich_results.csv"))
+      fig_png <- file.path(enrich_dir, paste0("Fig_Enrichment_", direction, "_", comp, ".png"))
+
+      has_go   <- !is.null(safe_read_csv(go_file))
+      has_kegg <- !is.null(safe_read_csv(kegg_file))
+      has_fig  <- file.exists(fig_png)
+
+      if (has_go || has_kegg) {
+        cat(sprintf("**%s**\n\n", dir_label))
+
+        if (has_go) {
+          go <- safe_read_csv(go_file)
+          cat(sprintf("GO 富集: \\textcolor{red}{%d} 条显著通路\n\n", nrow(go)))
+          top_go <- head(go[, c("ONTOLOGY", "Description", "p.adjust", "Count")], 10)
+          colnames(top_go) <- c("Category", "Description", "p.adjust", "Count")
+          kable(top_go, row.names = FALSE, align = 'c')
+          cat("\n\n")
+        } else {
+          cat("GO 富集无显著结果。\n\n")
+        }
+
+        if (has_kegg) {
+          kegg <- safe_read_csv(kegg_file)
+          cat(sprintf("KEGG 富集: \\textcolor{red}{%d} 条显著通路\n\n", nrow(kegg)))
+          top_kegg <- head(kegg[, c("Description", "p.adjust", "Count")], 10)
+          kable(top_kegg, row.names = FALSE, align = 'c')
+          cat("\n\n")
+        } else {
+          cat("KEGG 富集无显著结果。\n\n")
+        }
+
+        if (has_fig) {
+          cat(sprintf("\\reportfig{\\textwidth}{%s}{图 6-%d: %s %s GO \\& KEGG 富集点图。横轴为 Gene Ratio，纵轴为通路名称，圆点大小表示富集基因数，颜色区分通路分类 (GO BP/CC/MF 或 KEGG)。}\n\n",
+              fig_png, fig_num, comp_label, dir_label))
+          fig_num <- fig_num + 1
+        }
+      }
+    }
+  }
+} else {
+  cat("GO/KEGG 富集分析未运行或已跳过。\n\n")
+}
+```
+
+\newpage
+
+# 7. GSEA 分析
+
+```{r gsea-load}
+gsea_dir <- file.path(proj_dir, "07_GSEA")
+has_gsea <- dir.exists(gsea_dir) && !file.exists(file.path(gsea_dir, "SKIPPED"))
+if (has_gsea) {
+  gsea_files <- list.files(gsea_dir, pattern = "_GSEA_Result\\.csv$", full.names = TRUE)
+  has_gsea_files <- length(gsea_files) > 0
+} else {
+  has_gsea_files <- FALSE
+}
+```
+
+```{r gsea-iterate, results='asis', out.width='\\textwidth'}
+if (has_gsea_files) {
+  for (gf in gsea_files) {
+    gsea_res <- read.csv(gf, stringsAsFactors = FALSE)
+    if (nrow(gsea_res) > 0) {
+      base_name <- gsub("_GSEA_Result\\.csv$", "", basename(gf))
+      base_name_esc <- gsub("_", "\\\\_", base_name)
+      cat(sprintf("### %s\n\n", base_name_esc))
+      cat(sprintf("显著富集通路数: \\textcolor{red}{%d}\n\n", nrow(gsea_res)))
+      top_gsea <- head(gsea_res[, c("ID", "NES", "p.adjust")], 10)
+      top_gsea$ID <- gsub("_", "\\\\_", top_gsea$ID)
+      print(kable(top_gsea, row.names = FALSE, align = 'c', escape = FALSE))
+
+      gsea_plot <- file.path(gsea_dir, paste0(base_name, "_GSEA_Plot.png"))
+      if (file.exists(gsea_plot)) {
+        cat("\n")
+        cat(sprintf("\\reportfig{\\textwidth}{%s}{GSEA 富集分析图: %s。上半部分为富集评分 (Running Enrichment Score) 曲线，下半部分为基因排序的 signal-to-noise 分布，横轴为按相关性排序的基因列表。}\n\n", gsea_plot, base_name_esc))
+      }
+      cat("\n\n")
+    }
+  }
+} else if (!has_gsea) {
+  cat("GSEA 分析未运行或已跳过。\n\n")
+} else {
+  cat("无 GSEA 结果文件。\n\n")
+}
+```
+
+\newpage
+
+# 附录
+
+```{r appendix-pkgs, results='asis'}
+cat("## 使用 R 包\n\n")
+
+analysis_pkgs <- c(
+  "DESeq2", "clusterProfiler", "org.Hs.eg.db", "org.Mm.eg.db", "org.Rn.eg.db",
+  "ggplot2", "ggrepel", "pheatmap", "dplyr", "tidyr", "tibble",
+  "enrichplot", "DOSE", "knitr", "rmarkdown", "scales", "stringr",
+  "forcats", "readr", "purrr", "limma", "apeglm", "IHW", "biomaRt",
+  "AnnotationDbi", "GO.db", "KEGG.db", "ReactomePA", "msigdbr",
+  "fgsea", "ggpubr", "RColorBrewer", "gridExtra"
+)
+
+si <- sessionInfo()
+all_loaded <- unique(c(names(si$otherPkgs), names(si$loadedOnly)))
+
+pkgs_show <- intersect(analysis_pkgs, all_loaded)
+pkg_versions <- sapply(pkgs_show, function(p) {
+  tryCatch(as.character(packageVersion(p)), error = function(e) "unknown")
+})
+
+pkg_df <- data.frame(
+  Package = pkgs_show,
+  Version = pkg_versions,
+  row.names = NULL,
+  stringsAsFactors = FALSE
+)
+pkg_df <- pkg_df[order(tolower(pkg_df$Package)), ]
+
+n <- nrow(pkg_df)
+n_col <- 6
+n_per_col <- ceiling(n / (n_col / 2))
+
+col_data <- list()
+for (i in seq_len(n_col / 2)) {
+  start <- (i - 1) * n_per_col + 1
+  end <- min(i * n_per_col, n)
+  if (start <= n) {
+    sub <- pkg_df[start:end, , drop = FALSE]
+    if (nrow(sub) < n_per_col) {
+      sub <- rbind(sub, data.frame(Package = rep("", n_per_col - nrow(sub)),
+                                   Version = rep("", n_per_col - nrow(sub))))
+    }
+    col_data[[paste0("Package", i)]] <- sub$Package
+    col_data[[paste0("Version", i)]] <- sub$Version
+  } else {
+    col_data[[paste0("Package", i)]] <- rep("", n_per_col)
+    col_data[[paste0("Version", i)]] <- rep("", n_per_col)
+  }
+}
+
+wide_df <- as.data.frame(col_data, stringsAsFactors = FALSE)
+
+cat(sprintf("本报告使用 R version %s 进行分析，以下列出核心分析 R 包（共 **%d** 个）：\n\n",
+  paste0(si$R.version$major, ".", si$R.version$minor), n))
+
+kable(wide_df, row.names = FALSE, align = rep('c', n_col))
+```

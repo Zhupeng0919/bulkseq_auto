@@ -1,0 +1,140 @@
+# ============================================================
+# Bulkseq 自动化分析流程 — 项目配置文件
+# ============================================================
+# 使用方法：
+#   1. 复制此文件至项目根目录: cp config/config.yaml /path/to/project/
+#   2. 按项目实际情况修改下方参数
+#   3. 运行: bash run_pipeline.sh /path/to/project/ [--mode fastq|counts]
+# ============================================================
+
+# ---- 基本信息 ----
+
+# 【必填】项目目录的绝对路径
+# 示例: /home/zhuzp/bulkseq/Project-145
+project_dir: ""
+
+# 【必填】项目标识符（用于输出文件命名及报告标题）
+# 示例: Project-145
+project_id: "Project-XXX"
+
+# 物种，决定富集分析所用数据库
+#   human — org.Hs.eg.db + KEGG hsa
+#   mouse — org.Mm.eg.db + KEGG mmu
+#   rat   — org.Rn.eg.db + KEGG rno
+species: "human"
+
+# ---- 分析模式 ----
+
+# 流程起始点:
+#   fastq  — 从原始 FASTQ 开始（需项目目录下有 RawData/ 存放 *_1.fq.gz / *_2.fq.gz）
+#   counts — 从定量矩阵开始（需项目目录下有 04_Counts/counts.txt）
+mode: "counts"
+
+# ---- 参考基因组（仅在 mode=fastq 时使用） ----
+
+reference:
+  # HISAT2 索引前缀（不含 .1.ht2 等后缀）
+  # 示例: /home/zhuzp/reference/GRCh38_NEW_refer/h38_index
+  index: ""
+
+  # 基因注释 GTF 文件路径（featureCounts 定量使用）
+  # 示例: /home/zhuzp/reference/xxx/xxx.gtf
+  gtf: ""
+
+# ---- 上游预处理参数（仅在 mode=fastq 时使用） ----
+
+upstream:
+  # fastp 5' 端切除碱基数（测序起始若干 bp 信号不稳定，通常切除前 10-15 bp）
+  trim_front: 15
+
+  # 是否完全跳过质控步骤（仅调试用，正常应设为 false）
+  skip_qc: false
+
+  # 是否计入多比对 reads（featureCounts -M 参数，默认 false = 仅唯一比对）
+  multimapping: false
+
+# ---- DEG 差异表达分析参数 ----
+
+deg:
+  # |log2FoldChange| 阈值，绝对值低于此值的基因视为无显著变化
+  # 常用值: 0 (不做 fold change 筛选) / 0.585 (1.5 倍) / 1 (2 倍)
+  logFC_cutoff: 0.5
+
+  # adjusted p-value (padj) 显著性阈值
+  p_cutoff: 0.05
+
+# ---- 比较方案 ----
+
+# 方式一: 自动模式（comparisons 为空时生效，由 comparison_mode 控制）
+#   auto              — 自动检测: 2 组 → pairwise, ≥3 组 → control_vs_rest
+#                       第一组默认为对照组，如需指定对照请调整 sample_sheet.csv 中组的出现顺序
+#   pairwise          — 仅两组对比 (group[2] vs group[1]，前者分子后者分母)
+#   control_vs_rest   — 第一组为对照，其余各组分别与对照比较 + 所有敲减组合并与对照比较 (All_vs_control)
+#   all_vs_all        — 所有组两两比较
+comparison_mode: "auto"
+
+# 方式二: 手动指定比较列表（优先级高于 comparison_mode，非空列表时覆盖自动模式）
+# 每个元素格式: {分子组}_{vs}_{分母组}
+#   - 分子组: DESeq2 contrast 的 numerator 侧，log2FC > 0 表示该组高表达
+#   - 分母组: DESeq2 contrast 的 denominator 侧（通常为对照组/参考组）
+#   - All    : 特殊标签，表示合并所有非指定组（如 All_vs_SC = 除 SC 外所有组合并 vs SC）
+#   - All 可位于 _vs_ 任意一侧，分别表示不同的合并方向
+#
+# 用法示例:
+#   对照组为 SC，敲减组为 AB3、AB7:
+#   comparisons:
+#     - "SC_vs_AB3"   # SC 与 AB3 比较（SC 为分子 = SC 中相对于 AB3 的变化）
+#     - "SC_vs_AB7"   # SC 与 AB7 比较
+#     - "SC_vs_All"   # SC 与 AB3+AB7 合并组比较
+#
+#   对照组为 WT，敲减组为 KD1、KD2:
+#   comparisons:
+#     - "KD1_vs_WT"   # KD1 与 WT 比较（KD1 为分子 = KD1 中相对于 WT 的变化）
+#     - "KD2_vs_WT"   # KD2 与 WT 比较
+#     - "All_vs_WT"   # KD1+KD2 合并与 WT 比较
+#
+# 注意: 组名必须与 sample_sheet.csv 中 group 列的取值完全一致（含大小写）
+comparisons: []
+# comparisons:
+#   - "SC_vs_AB3"
+#   - "SC_vs_AB7"
+#   - "SC_vs_All"
+
+# ---- 样本剔除 ----
+
+# 剔除离群样本（填写样本名，须与 sample_sheet.csv 中 sample 列一致）
+# 剔除后相关组若仅剩 1 个重复，DESeq2 仍可运行但统计效力降低
+# 示例: ["AB3-3", "AB7-5"]
+# 留空 = 不剔除任何样本
+exclude_samples: []
+
+# ---- 批次效应校正 ----
+
+batch:
+  # 是否启用批次效应校正
+  # - 设置为 true 后，需在 sample_sheet.csv 中添加 batch 列
+  # - DEG 分析中 batch 作为协变量纳入 DESeq2 设计公式 (~ batch + group)
+  # - PCA 和相关性热图使用 limma::removeBatchEffect 校正后的 TPM
+  correct: false
+
+# ---- 富集分析控制 ----
+
+enrichment:
+  # 是否运行 GO + KEGG 富集分析（基于 DEG 结果，上调/下调分别富集）
+  go_kegg: true
+
+  # 是否运行 GSEA 基因集富集分析（基于 msigdbr 数据库）
+  gsea: true
+
+  # GSEA 目标基因列表，空列表 = 自动使用所有 DEG 基因
+  # 如需指定特定基因集: ["H", "C2", "C5"]（MSigDB 分类代码）
+  gsea_target_genes: []
+
+# ---- 流程检查点（仅在 mode=fastq 时有效） ----
+
+checkpoint:
+  # fastp / FastQC 完成后暂停，等待人工检查质控报告（MultiQC）再继续
+  after_qc: true
+
+  # HISAT2 比对完成后暂停，等待人工检查比对率统计再继续
+  after_alignment: true

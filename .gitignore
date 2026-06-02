@@ -1,0 +1,35 @@
+# Reference data and raw FASTQ files (large, not part of code)
+ref/
+
+# Snakemake runtime cache
+.snakemake/
+
+# Claude Code project state
+.claude/
+
+# Python cache
+scripts/__pycache__/
+
+# LaTeX auxiliary files
+scripts/*.aux
+scripts/*.toc
+scripts/*.log
+scripts/*.out
+
+# R temporary files
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# Internal planning notes
+PLAN_v2.md
+
+# R plots output
+Rplots.pdf
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
