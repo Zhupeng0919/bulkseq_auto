@@ -85,12 +85,16 @@ reference:
 project/
 ├── config.yaml          # 项目配置（必填）
 ├── sample_sheet.csv     # 样本信息表（必填）
-├── RawData/             # FASTQ 文件（fastq 模式必需）
-├── 04_Counts/           # 定量矩阵（counts 模式需要有 counts.txt）
+├── RawData/             # FASTQ 文件（fastq 模式输入）
+├── 01_CleanData/        # fastp 质控过滤后 FASTQ（fastq 模式输出）
+├── 02_QC_Reports/       # FastQC + fastp + MultiQC 质控报告（fastq 模式输出）
+├── 03_Alignment/        # HISAT2 比对 BAM 文件（fastq 模式输出）
+├── 04_Counts/           # 定量矩阵（counts 模式输入 / fastq 模式输出）
 ├── 05_DEG/              # 差异表达分析结果
 ├── 06_GO_KEGG/          # GO/KEGG 富集分析结果
 ├── 07_GSEA/             # GSEA 分析结果
 ├── logs/                # 运行日志
+├── total_mapping_summary.txt  # 比对率汇总（fastq 模式输出）
 └── Report.pdf           # 最终 PDF 报告
 ```
 
@@ -131,6 +135,13 @@ sample4,Treatment1
 
 ## 输出说明
 
+**上游（fastq 模式）：**
+- `01_CleanData/` — fastp 质控过滤后的 FASTQ 文件
+- `02_QC_Reports/` — fastp HTML + FastQC HTML + MultiQC 汇总报告
+- `03_Alignment/` — HISAT2 比对 BAM + BAI 索引
+- `total_mapping_summary.txt` — 各样本比对率汇总
+
+**下游（counts/fastq 模式）：**
 - `04_Counts/` — counts/fpkm/tpm 定量矩阵（含过滤前后）
 - `05_DEG/` — 差异基因 CSV + 火山图 + 热图（PDF/PNG）
 - `06_GO_KEGG/` — GO/KEGG 富集结果 CSV + 富集图（PDF/PNG）
