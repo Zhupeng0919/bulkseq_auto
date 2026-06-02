@@ -26,8 +26,18 @@ _LOGS_DIR     = os.path.join(PROJ, "logs")
 os.makedirs(_LOGS_DIR, exist_ok = True)
 
 # 参考路径
-IDX = config.get("reference", {}).get("index", "")
-GTF = config.get("reference", {}).get("gtf", "")
+IDX = ""
+GTF = ""
+REF_ROOT = config.get("reference", {}).get("root", "")
+_SPECIES_TO_GENOME = {"human": "GRCh38.p14", "mouse": "GRCm39", "rat": "GRCr8"}
+_GENOME_NAME = _SPECIES_TO_GENOME.get(SPECIES, "")
+
+if REF_ROOT and _GENOME_NAME:
+    IDX = config.get("reference", {}).get("index") or os.path.join(REF_ROOT, _GENOME_NAME, f"{_GENOME_NAME}_index")
+    GTF = config.get("reference", {}).get("gtf") or os.path.join(REF_ROOT, _GENOME_NAME, f"{_GENOME_NAME}.gtf")
+else:
+    IDX = config.get("reference", {}).get("index", "")
+    GTF = config.get("reference", {}).get("gtf", "")
 
 # 参数
 LFC  = config.get("deg", {}).get("logFC_cutoff", 0.5)

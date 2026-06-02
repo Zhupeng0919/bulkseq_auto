@@ -33,12 +33,13 @@ mode: "counts"
 # ---- 参考基因组（仅在 mode=fastq 时使用） ----
 
 reference:
-  # HISAT2 索引前缀（不含 .1.ht2 等后缀）
-  # 示例: /home/zhuzp/reference/GRCh38_NEW_refer/h38_index
+  # 参考基因组根目录，按 {root}/{genome}/ 组织：
+  #   索引: {genome}_index.*.ht2
+  #   GTF:  {genome}.gtf
+  # 设置 root 后，index/gtf 可留空，由 species 自动推导
+  # 手动指定 index/gtf 优先于自动推导
+  root: ""
   index: ""
-
-  # 基因注释 GTF 文件路径（featureCounts 定量使用）
-  # 示例: /home/zhuzp/reference/xxx/xxx.gtf
   gtf: ""
 
 # ---- 上游预处理参数（仅在 mode=fastq 时使用） ----
