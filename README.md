@@ -18,11 +18,59 @@ conda env create -f bioenv/environment_portable.yml
 # 2. 激活环境
 conda activate bioinfo_env
 
-# 3. 创建项目目录，准备输入数据（见下方），放入 config.yaml 和 sample_sheet.csv
+# 3. 构建参考基因组（仅 fastq 模式需要，首次一次性操作）
+bash scripts/build_reference.sh human   # 可选 human / mouse / rat
 
-# 4. 运行
+# 4. 创建项目目录，准备输入数据，放入 config.yaml 和 sample_sheet.csv
+
+# 5. 运行
 bash run_pipeline.sh /path/to/project/ --mode counts --cores 16
 ```
+
+## 构建参考基因组
+
+fastq 模式需要 HISAT2 索引和基因注释 GTF。`scripts/build_reference.sh` 一键完成下载→校验→构建。
+
+```bash
+conda activate bioinfo_env
+bash scripts/build_reference.sh <species>
+```
+
+| 参数 | 基因组 | 下载大小 | 构建耗时 | 内存需求 |
+|------|--------|----------|----------|----------|
+| `human` | GRCh38.p14 | ~3 GB | 2-3 小时 | 64 GB+ |
+| `mouse` | GRCm39 | ~3 GB | 1-2 小时 | 32 GB+ |
+| `rat` | GRCr8 | ~2 GB | 1-2 小时 | 32 GB+ |
+
+> 下载源和输出路径在 `config/reference_sources.yaml` 中配置。
+
+产物目录结构（`{reference_root}/{genome_name}/`）：
+
+```
+reference/
+├── GRCh38.p14/
+│   ├── GRCh38.p14_index.1.ht2 ... .8.ht2
+│   └── GRCh38.p14.gtf
+├── GRCm39/
+│   ├── GRCm39_index.1.ht2 ... .8.ht2
+│   └── GRCm39.gtf
+└── GRCr8/
+    ├── GRCr8_index.1.ht2 ... .8.ht2
+    └── GRCr8.gtf
+```
+
+项目 config 中只需指定 `species` 和 `reference.root`，索引/GTF 路径自动推导：
+
+```yaml
+species: "human"
+reference:
+  root: "/home/zhuzp/reference"
+  # index 和 gtf 留空，自动推导为:
+  #   {root}/GRCh38.p14/GRCh38.p14_index
+  #   {root}/GRCh38.p14/GRCh38.p14.gtf
+```
+
+手动指定 `index`/`gtf` 的优先级高于自动推导。
 
 ## 两种分析模式
 
@@ -70,6 +118,9 @@ sample4,Treatment1
 | `project_id` | 项目标识符 | - |
 | `mode` | 分析模式: `fastq` \| `counts` | `fastq` |
 | `species` | 物种: `human` \| `mouse` \| `rat` | `human` |
+| `reference.root` | 参考基因组根目录（自动推导 index/gtf 时使用） | `""` |
+| `reference.index` | HISAT2 索引前缀（手动指定，优先于自动推导） | `""` |
+| `reference.gtf` | GTF 注释文件路径（手动指定，优先于自动推导） | `""` |
 | `deg.logFC_cutoff` | 差异倍数阈值 | `0.5` |
 | `deg.p_cutoff` | 显著性阈值 | `0.05` |
 | `comparison_mode` | 比较策略: `auto` \| `pairwise` \| `control_vs_rest` \| `all_vs_all` | `auto` |
