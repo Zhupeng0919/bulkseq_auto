@@ -1,0 +1,34 @@
+# ============================================================
+# 参考基因组下载源配置
+# ============================================================
+# 用法:
+#   bash scripts/build_reference.sh <species_key>
+#
+# 每个物种包含:
+#   species     — 物种名 (human / mouse / rat)
+#   genome_name — 基因组版本名
+#   fasta_url   — NCBI 基因组 FASTA 下载地址
+#   gtf_url     — NCBI 基因注释 GTF 下载地址
+#   output_dir  — 索引输出目录（最终产物为该目录下的 <genome_name>_index.*.ht2）
+# ============================================================
+
+human:
+  species: "human"
+  genome_name: "GRCh38.p14"
+  fasta_url: "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/001/405/GCF_000001405.40_GRCh38.p14/GCF_000001405.40_GRCh38.p14_genomic.fna.gz"
+  gtf_url: "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/001/405/GCF_000001405.40_GRCh38.p14/GCF_000001405.40_GRCh38.p14_genomic.gtf.gz"
+  output_dir: "/home/zhuzp/reference/GRCh38_p14"
+
+mouse:
+  species: "mouse"
+  genome_name: "GRCm39"
+  fasta_url: "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/001/635/GCF_000001635.27_GRCm39/GCF_000001635.27_GRCm39_genomic.fna.gz"
+  gtf_url: "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/001/635/GCF_000001635.27_GRCm39/GCF_000001635.27_GRCm39_genomic.gtf.gz"
+  output_dir: "/home/zhuzp/reference/GRCm39"
+
+rat:
+  species: "rat"
+  genome_name: "GRCr8"
+  fasta_url: "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/036/323/735/GCF_036323735.1_GRCr8/GCF_036323735.1_GRCr8_genomic.fna.gz"
+  gtf_url: "https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/036/323/735/GCF_036323735.1_GRCr8/GCF_036323735.1_GRCr8_genomic.gtf.gz"
+  output_dir: "/home/zhuzp/reference/GRCr8"

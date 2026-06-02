@@ -392,6 +392,15 @@ if MODE == "fastq":
     ALIGN = os.path.join(PROJ, "03_Alignment")
     COUNT = os.path.join(PROJ, "04_Counts")
 
+    if not IDX:
+        raise ValueError(
+            "mode=fastq 需要 HISAT2 索引，但 config.yaml 中 reference.index 为空。\n"
+            "请先构建参考基因组: bash scripts/build_reference.sh <species>")
+    if not GTF:
+        raise ValueError(
+            "mode=fastq 需要基因注释 GTF，但 config.yaml 中 reference.gtf 为空。\n"
+            "请先构建参考基因组: bash scripts/build_reference.sh <species>")
+
     def get_samples():
         """
         扫描 RawData/ 下的 PE FASTQ 文件，返回样本列表。
