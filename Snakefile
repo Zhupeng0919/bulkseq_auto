@@ -321,27 +321,36 @@ else:
 # ============================================================
 # 模块四：GSEA 分析 (07_GSEA)
 # ============================================================
-rule gsea:
-    input:
-        fpkm = os.path.join(PROJ, "04_Counts", f"{PID}_fpkm_filtered.xls"),
-        deg  = os.path.join(PROJ, "05_DEG", f"{PID}_All_Diff.csv")
-    output:
-        done = os.path.join(PROJ, "07_GSEA", ".done")
-    params:
-        outdir = os.path.join(PROJ, "07_GSEA")
-    run:
-        os.makedirs(params.outdir, exist_ok = True)
-        if DO_GSEA:
-            cmd = ("{{_RSCRIPT}} {0}/gsea.R --counts {1} --deg {2}"
-                   " --outdir {3} --project {4} --species {5}"
-                   .format(_SCRIPTS_DIR, input.fpkm, input.deg,
-                           params.outdir, PID, SPECIES))
-            if GSEA_GENES:
-                cmd += " --genes " + ",".join(GSEA_GENES)
-            shell(cmd)
-        else:
-            shell("touch {0}/SKIPPED".format(params.outdir))
-        shell("touch {0}".format(output.done))
+if DO_GSEA and len(COMPARISONS) > 0:
+    rule gsea:
+        input:
+            deg_done = os.path.join(PROJ, "05_DEG", ".deg_done")
+        output:
+            touch(os.path.join(PROJ, "07_GSEA", ".gsea_done"))
+        params:
+            outdir = os.path.join(PROJ, "07_GSEA"),
+            comps  = COMPARISONS
+        run:
+            os.makedirs(params.outdir, exist_ok = True)
+            for comp in params.comps:
+                diff_csv = os.path.join(PROJ, "05_DEG", f"{PID}_{comp}_Diff.csv")
+                shell("""
+                    {{_RSCRIPT}} {0}/gsea.R \
+                      --deg        {1} \
+                      --outdir     {2} \
+                      --project    {3} \
+                      --species    {4} \
+                      --comparison {5}
+                """.format(_SCRIPTS_DIR, diff_csv, params.outdir, PID, SPECIES, comp))
+else:
+    rule gsea:
+        input:
+            deg_done = os.path.join(PROJ, "05_DEG", ".deg_done")
+        output:
+            touch(os.path.join(PROJ, "07_GSEA", ".gsea_done"))
+        run:
+            os.makedirs(os.path.join(PROJ, "07_GSEA"), exist_ok = True)
+            shell("touch {0}/SKIPPED".format(os.path.join(PROJ, "07_GSEA")))
 
 
 # ============================================================
@@ -352,7 +361,7 @@ def _report_inputs(wildcards):
     d = {
         'deg_done':  os.path.join(PROJ, "05_DEG", ".deg_done"),
         'gokegg':    os.path.join(PROJ, "06_GO_KEGG", ".gokegg_done"),
-        'gsea_done': os.path.join(PROJ, "07_GSEA", ".done"),
+        'gsea_done': os.path.join(PROJ, "07_GSEA", ".gsea_done"),
     }
     if BATCH_CORRECT:
         d['tpm'] = os.path.join(PROJ, "04_Counts", f"{PID}_tpm_batch_corrected.xls")

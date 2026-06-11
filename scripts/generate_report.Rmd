@@ -631,36 +631,47 @@ if (has_enrich_dir && length(comps_raw) > 0) {
 
 \newpage
 
-# 7. GSEA 分析
+# 7. GSEA 富集分析
 
-```{r gsea-load}
+```{r gsea-per-comparison, results='asis', out.width='\\textwidth'}
 gsea_dir <- file.path(proj_dir, "07_GSEA")
 has_gsea <- dir.exists(gsea_dir) && !file.exists(file.path(gsea_dir, "SKIPPED"))
-if (has_gsea) {
-  gsea_files <- list.files(gsea_dir, pattern = "_GSEA_Result\\.csv$", full.names = TRUE)
-  has_gsea_files <- length(gsea_files) > 0
-} else {
-  has_gsea_files <- FALSE
-}
-```
 
-```{r gsea-iterate, results='asis', out.width='\\textwidth'}
-if (has_gsea_files) {
-  for (gf in gsea_files) {
-    gsea_res <- read.csv(gf, stringsAsFactors = FALSE)
-    if (nrow(gsea_res) > 0) {
-      base_name <- gsub("_GSEA_Result\\.csv$", "", basename(gf))
-      base_name_esc <- gsub("_", "\\\\_", base_name)
-      cat(sprintf("### %s\n\n", base_name_esc))
-      cat(sprintf("显著富集通路数: \\textcolor{red}{%d}\n\n", nrow(gsea_res)))
+gsea_types <- c("GO", "KEGG", "Hallmark")
+gsea_labels <- c("GO BP", "KEGG", "Hallmark")
+
+if (has_gsea && length(comps_raw) > 0) {
+  for (comp in comps_raw) {
+    comp_label <- fmt_comparison(comp)
+    cat(sprintf("\n## %s\n\n", comp_label))
+
+    for (j in seq_along(gsea_types)) {
+      etype <- gsea_types[j]
+      elabel <- gsea_labels[j]
+
+      gsea_csv <- file.path(gsea_dir, paste0(proj_id, "_", comp, "_GSEA_", etype, ".csv"))
+      gsea_png_up   <- file.path(gsea_dir, paste0(proj_id, "_", comp, "_GSEA_", etype, "_Top5_Up.png"))
+      gsea_png_down <- file.path(gsea_dir, paste0(proj_id, "_", comp, "_GSEA_", etype, "_Top5_Down.png"))
+
+      gsea_res <- safe_read_csv(gsea_csv)
+      if (is.null(gsea_res) || nrow(gsea_res) == 0) {
+        cat(sprintf("%s GSEA: 无显著富集通路。\n\n", elabel))
+        next
+      }
+
+      cat(sprintf("### %s (%d 通路)\n\n", elabel, nrow(gsea_res)))
+
       top_gsea <- head(gsea_res[, c("ID", "NES", "p.adjust")], 10)
       top_gsea$ID <- gsub("_", "\\\\_", top_gsea$ID)
       print(kable(top_gsea, row.names = FALSE, align = 'c', escape = FALSE))
 
-      gsea_plot <- file.path(gsea_dir, paste0(base_name, "_GSEA_Plot.png"))
-      if (file.exists(gsea_plot)) {
+      if (file.exists(gsea_png_up)) {
         cat("\n")
-        cat(sprintf("\\reportfig{\\textwidth}{%s}{GSEA 富集分析图: %s。上半部分为富集评分 (Running Enrichment Score) 曲线，下半部分为基因排序的 signal-to-noise 分布，横轴为按相关性排序的基因列表。}\n\n", gsea_plot, base_name_esc))
+        cat(sprintf("\\reportfig{\\textwidth}{%s}{GSEA %s (上调): %s}\n\n", gsea_png_up, elabel, comp_label))
+      }
+      if (file.exists(gsea_png_down)) {
+        cat("\n")
+        cat(sprintf("\\reportfig{\\textwidth}{%s}{GSEA %s (下调): %s}\n\n", gsea_png_down, elabel, comp_label))
       }
       cat("\n\n")
     }
@@ -668,7 +679,7 @@ if (has_gsea_files) {
 } else if (!has_gsea) {
   cat("GSEA 分析未运行或已跳过。\n\n")
 } else {
-  cat("无 GSEA 结果文件。\n\n")
+  cat("无比较组信息。\n\n")
 }
 ```
 
@@ -682,10 +693,10 @@ cat("## 使用 R 包\n\n")
 analysis_pkgs <- c(
   "DESeq2", "clusterProfiler", "org.Hs.eg.db", "org.Mm.eg.db", "org.Rn.eg.db",
   "ggplot2", "ggrepel", "pheatmap", "dplyr", "tidyr", "tibble",
-  "enrichplot", "DOSE", "knitr", "rmarkdown", "scales", "stringr",
+  "enrichplot", "knitr", "rmarkdown", "scales", "stringr",
   "forcats", "readr", "purrr", "limma", "apeglm", "IHW", "biomaRt",
-  "AnnotationDbi", "GO.db", "KEGG.db", "ReactomePA", "msigdbr",
-  "fgsea", "ggpubr", "RColorBrewer", "gridExtra"
+  "AnnotationDbi", "GO.db", "msigdbr", "fgsea",
+  "ggpubr", "RColorBrewer", "gridExtra"
 )
 
 si <- sessionInfo()
