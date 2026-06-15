@@ -404,6 +404,8 @@ rule report:
         mv {PROJ}/total_mapping_summary.txt {PROJ}/00_Config/ 2>/dev/null || true
         mv {PROJ}/Report.tex {PROJ}/00_Config/ 2>/dev/null || true
         mv {PROJ}/config.yaml {PROJ}/00_Config/ 2>/dev/null || true
+        PROJ_NAME=$(basename {PROJ})
+        cd {PROJ} && zip -r ../${{PROJ_NAME}}_result.zip 04_Counts 05_DEG 06_GO_KEGG 07_GSEA sample_sheet.csv Report.pdf -x "04_Counts/counts.txt" "04_Counts/counts.txt.summary" 2>/dev/null || true
         """
 
 

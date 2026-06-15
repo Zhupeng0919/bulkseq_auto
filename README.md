@@ -151,7 +151,7 @@ sample4,Treatment1
 - `07_GSEA/` — GSEA 分析结果
 - `Report.pdf` — 整合 PDF 报告（含表号和图号，带目录）
 
-> 报告完成后，`config.yaml`、`total_mapping_summary.txt` 和 `Report.tex` 移入 `00_Config/`；原始 `counts.txt`、`counts.txt.summary` 和 `logs/` 自动删除（包含内部路径）。
+> 报告完成后，`config.yaml`、`total_mapping_summary.txt` 和 `Report.tex` 移入 `00_Config/`；原始 `counts.txt`、`counts.txt.summary` 和 `logs/` 自动删除（包含内部路径）。输出目录、`sample_sheet.csv` 和 `Report.pdf` 自动打包为 `{项目名}_result.zip`。
 
 ## License
 
