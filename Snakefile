@@ -199,17 +199,17 @@ rule filter_samples:
         tpm    = os.path.join(PROJ, "04_Counts", f"{PID}_tpm.xls"),
         sample = find_sample_sheet
     output:
-        counts_filt = os.path.join(PROJ, "04_Counts", f"{PID}_counts_filtered.xls"),
-        fpkm_filt   = os.path.join(PROJ, "04_Counts", f"{PID}_fpkm_filtered.xls"),
-        tpm_filt    = os.path.join(PROJ, "04_Counts", f"{PID}_tpm_filtered.xls"),
-        sample_filt = os.path.join(PROJ, "04_Counts", "sample_sheet_filtered.csv")
+        counts_filt = os.path.join(PROJ, "04_Counts", "filtered", f"{PID}_counts_filtered.xls"),
+        fpkm_filt   = os.path.join(PROJ, "04_Counts", "filtered", f"{PID}_fpkm_filtered.xls"),
+        tpm_filt    = os.path.join(PROJ, "04_Counts", "filtered", f"{PID}_tpm_filtered.xls"),
+        sample_filt = os.path.join(PROJ, "04_Counts", "filtered", "sample_sheet_filtered.csv")
     params:
         outdir  = os.path.join(PROJ, "04_Counts"),
         sdir    = _SCRIPTS_DIR,
         exclude = ",".join(EXCLUDE_SAMPLES) if EXCLUDE_SAMPLES else ""
     shell:
         """
-        mkdir -p {params.outdir}
+        mkdir -p {params.outdir}/filtered
         {_RSCRIPT} {params.sdir}/filter_samples.R \
           --counts  {input.counts} \
           --sample  {input.sample} \
@@ -225,8 +225,8 @@ rule filter_samples:
 if BATCH_CORRECT:
     rule batch_correct:
         input:
-            tpm    = os.path.join(PROJ, "04_Counts", f"{PID}_tpm_filtered.xls"),
-            sample = os.path.join(PROJ, "04_Counts", "sample_sheet_filtered.csv")
+            tpm    = os.path.join(PROJ, "04_Counts", "filtered", f"{PID}_tpm_filtered.xls"),
+            sample = os.path.join(PROJ, "04_Counts", "filtered", "sample_sheet_filtered.csv")
         output:
             tpm_bc = os.path.join(PROJ, "04_Counts", f"{PID}_tpm_batch_corrected.xls"),
             done   = touch(os.path.join(PROJ, "04_Counts", ".batch_correct_done"))
@@ -246,8 +246,8 @@ if BATCH_CORRECT:
 def _deg_inputs(wildcards):
     """返回 deg 规则的输入，当启用批次校正时添加依赖"""
     d = {
-        'counts': os.path.join(PROJ, "04_Counts", f"{PID}_counts_filtered.xls"),
-        'sample': os.path.join(PROJ, "04_Counts", "sample_sheet_filtered.csv"),
+        'counts': os.path.join(PROJ, "04_Counts", "filtered", f"{PID}_counts_filtered.xls"),
+        'sample': os.path.join(PROJ, "04_Counts", "filtered", "sample_sheet_filtered.csv"),
     }
     if BATCH_CORRECT:
         d['batch_done'] = os.path.join(PROJ, "04_Counts", ".batch_correct_done")
@@ -366,7 +366,7 @@ def _report_inputs(wildcards):
     if BATCH_CORRECT:
         d['tpm'] = os.path.join(PROJ, "04_Counts", f"{PID}_tpm_batch_corrected.xls")
     else:
-        d['tpm'] = os.path.join(PROJ, "04_Counts", f"{PID}_tpm_filtered.xls")
+        d['tpm'] = os.path.join(PROJ, "04_Counts", "filtered", f"{PID}_tpm_filtered.xls")
     return d
 
 
@@ -397,6 +397,9 @@ rule report:
           output_dir  = "{PROJ}",
           quiet = TRUE
         )'
+        rm -f {PROJ}/04_Counts/counts.txt
+        rm -f {PROJ}/04_Counts/counts.txt.summary
+        rm -rf {_LOGS_DIR}
         """
 
 

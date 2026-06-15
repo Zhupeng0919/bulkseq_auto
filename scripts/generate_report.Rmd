@@ -23,7 +23,7 @@ header-includes:
   - \titlespacing*{\subsection}{0pt}{2ex plus .5ex minus .2ex}{1ex plus .2ex}
   - \titleformat{\subsubsection}{\large\bfseries}{\thesubsubsection}{1em}{}
   - \titlespacing*{\subsubsection}{0pt}{1.5ex plus .5ex minus .2ex}{0.5ex plus .2ex}
-  - '\captionsetup{font={small,it}, labelfont=bf, justification=raggedright, singlelinecheck=false, margin=10pt}'
+  - '\captionsetup{font={small,it}, labelfont=bf, justification=raggedright, singlelinecheck=false, margin=10pt, labelformat=empty}'
   - '\newcommand{\reportfig}[3]{\begin{center}\includegraphics[width=#1]{#2}\par\vspace{0.3em}{\small\itshape  #3}\end{center}\par}'
 params:
   project_dir: ""
@@ -81,10 +81,10 @@ if (species == "human") {
 }
 
 # Shorten sample names: E260417001_L01_con1-1 → con1-1
-short_name <- function(x) gsub("^.*_", "", x)
+short_name <- function(x) gsub("^[A-Z]\\d+_L\\d+_", "", x)
 
 # Load sample info (prefer filtered)
-sample_file <- file.path(proj_dir, "04_Counts", "sample_sheet_filtered.csv")
+sample_file <- file.path(proj_dir, "04_Counts", "filtered", "sample_sheet_filtered.csv")
 if (!file.exists(sample_file)) {
   sample_file <- file.path(proj_dir, "sample_sheet.csv")
 }
@@ -97,7 +97,7 @@ if (has_sample_info) {
 tpm_file <- file.path(proj_dir, "04_Counts", paste0(proj_id, "_tpm_batch_corrected.xls"))
 tpm_source <- "batch-corrected"
 if (!file.exists(tpm_file)) {
-  tpm_file <- file.path(proj_dir, "04_Counts", paste0(proj_id, "_tpm_filtered.xls"))
+  tpm_file <- file.path(proj_dir, "04_Counts", "filtered", paste0(proj_id, "_tpm_filtered.xls"))
   tpm_source <- "filtered"
   if (!file.exists(tpm_file)) {
     tpm_file <- file.path(proj_dir, "04_Counts", paste0(proj_id, "_tpm.xls"))
@@ -159,7 +159,7 @@ has_summary <- file.exists(summary_file)
 
 fc_summary_file <- file.path(proj_dir, "04_Counts", "counts.txt.summary")
 if (!file.exists(fc_summary_file)) {
-  fc_summary_file <- file.path(proj_dir, "04_Counts", "counts_filtered.txt.summary")
+  fc_summary_file <- file.path(proj_dir, "04_Counts", "filtered", "counts_filtered.txt.summary")
 }
 has_fc <- file.exists(fc_summary_file)
 
@@ -198,17 +198,19 @@ if (has_summary && has_fc) {
 if (has_summary && has_fc) {
   cat("## 2.2 比对与定量统计\n\n")
   cat("下表汇总了每个样本的 HISAT2 比对率及 featureCounts 基因匹配率：\n\n")
+  cat("- **HISAT2 比对率（HISAT2 Mapping Rate）**：RNA-seq 数据中 HISAT2 比对率的正常范围为 **70%–95%**。低于 50% 表示可能存在污染或比对问题，需要关注；高于 95% 表示比对质量优秀。\n\n")
+  cat("- **featureCounts 基因匹配率（FeatureCount Assignment Rate）**：已比对 reads 中成功分配到基因特征的比例。对于高质量 RNA-seq 数据和注释完善的参考基因组，通常 **60%–80%** 的已比对 reads 能被分配到基因。低于 50% 可能提示 rRNA 或 DNA 污染、参考基因组注释不完善，或 reads 多重比对问题。\n\n")
 }
 ```
 
 ```{r combined-table}
 if (has_summary && has_fc) {
-  kable(combined, row.names = FALSE, align = 'c')
+  kable(combined, row.names = FALSE, align = 'c', caption = "表 2-1: 比对与定量统计结果")
 } else if (has_summary) {
   mapping_data <- read.table(summary_file, header = TRUE, stringsAsFactors = FALSE, fill = TRUE, na.strings = "")
   mapping_data <- mapping_data[!is.na(mapping_data$HISAT2_Mapping_Rate), ]
   mapping_data$SampleID <- short_name(mapping_data$SampleID)
-  kable(mapping_data, row.names = FALSE, align = 'c')
+  kable(mapping_data, row.names = FALSE, align = 'c', caption = "表 2-1: HISAT2 比对率统计")
 } else {
   cat("无比对统计信息。\n")
 }
@@ -269,7 +271,7 @@ cat("计算步骤：先计算每个基因的 reads-per-kilobase (RPK)，再将 R
 ```
 
 ```{r counts-load}
-counts_file <- file.path(proj_dir, "04_Counts", paste0(proj_id, "_counts_filtered.xls"))
+counts_file <- file.path(proj_dir, "04_Counts", "filtered", paste0(proj_id, "_counts_filtered.xls"))
 if (!file.exists(counts_file)) {
   counts_file <- file.path(proj_dir, "04_Counts", paste0(proj_id, "_counts.xls"))
 }
@@ -451,7 +453,7 @@ if (has_sample_info) {
     cat("DESeq2 使用负二项分布模型对 counts 数据进行建模，通过 empirical Bayes 收缩估计离散度，")
     cat("并使用 Wald 检验评估每个基因在组间的表达差异显著性。\n\n")
     # Check if batch was used in DESeq2 design
-    sample_info_file <- file.path(proj_dir, "04_Counts", "sample_sheet_filtered.csv")
+    sample_info_file <- file.path(proj_dir, "04_Counts", "filtered", "sample_sheet_filtered.csv")
     if (file.exists(sample_info_file)) {
       si <- read.csv(sample_info_file, stringsAsFactors = FALSE)
       if ("batch" %in% colnames(si)) {
@@ -577,6 +579,7 @@ if (has_enrich_dir && length(comps_raw) > 0) {
   cat("对每个比较的上调基因和下调基因分别进行 GO 和 KEGG 富集分析。\n\n")
 
   fig_num <- 1
+  table_num <- 1
   for (comp in comps_raw) {
     comp_label <- fmt_comparison(comp)
     cat(sprintf("\n### %s\n\n", comp_label))
@@ -600,7 +603,9 @@ if (has_enrich_dir && length(comps_raw) > 0) {
           cat(sprintf("GO 富集: \\textcolor{red}{%d} 条显著通路\n\n", nrow(go)))
           top_go <- head(go[, c("ONTOLOGY", "Description", "p.adjust", "Count")], 10)
           colnames(top_go) <- c("Category", "Description", "p.adjust", "Count")
-          kable(top_go, row.names = FALSE, align = 'c')
+          kable(top_go, row.names = FALSE, align = 'c',
+                caption = paste0("表 6-", table_num, ": ", comp_label, " ", dir_label, " GO 富集 Top 10"))
+          table_num <- table_num + 1
           cat("\n\n")
         } else {
           cat("GO 富集无显著结果。\n\n")
@@ -610,7 +615,9 @@ if (has_enrich_dir && length(comps_raw) > 0) {
           kegg <- safe_read_csv(kegg_file)
           cat(sprintf("KEGG 富集: \\textcolor{red}{%d} 条显著通路\n\n", nrow(kegg)))
           top_kegg <- head(kegg[, c("Description", "p.adjust", "Count")], 10)
-          kable(top_kegg, row.names = FALSE, align = 'c')
+          kable(top_kegg, row.names = FALSE, align = 'c',
+                caption = paste0("表 6-", table_num, ": ", comp_label, " ", dir_label, " KEGG 富集 Top 10"))
+          table_num <- table_num + 1
           cat("\n\n")
         } else {
           cat("KEGG 富集无显著结果。\n\n")
@@ -641,6 +648,7 @@ gsea_types <- c("GO", "KEGG", "Hallmark")
 gsea_labels <- c("GO BP", "KEGG", "Hallmark")
 
 if (has_gsea && length(comps_raw) > 0) {
+  table_num <- 1
   for (comp in comps_raw) {
     comp_label <- fmt_comparison(comp)
     cat(sprintf("\n## %s\n\n", comp_label))
@@ -663,7 +671,9 @@ if (has_gsea && length(comps_raw) > 0) {
 
       top_gsea <- head(gsea_res[, c("ID", "NES", "p.adjust")], 10)
       top_gsea$ID <- gsub("_", "\\\\_", top_gsea$ID)
-      print(kable(top_gsea, row.names = FALSE, align = 'c', escape = FALSE))
+      print(kable(top_gsea, row.names = FALSE, align = 'c', escape = FALSE,
+                  caption = paste0("表 7-", table_num, ": ", comp_label, " GSEA ", elabel, " Top 10")))
+      table_num <- table_num + 1
 
       if (file.exists(gsea_png_up)) {
         cat("\n")
@@ -742,5 +752,5 @@ wide_df <- as.data.frame(col_data, stringsAsFactors = FALSE)
 cat(sprintf("本报告使用 R version %s 进行分析，以下列出核心分析 R 包（共 **%d** 个）：\n\n",
   paste0(si$R.version$major, ".", si$R.version$minor), n))
 
-kable(wide_df, row.names = FALSE, align = rep('c', n_col))
+kable(wide_df, row.names = FALSE, align = rep('c', n_col), caption = "附表 1: 核心分析 R 包")
 ```

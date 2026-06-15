@@ -24,6 +24,8 @@ exclude_str <- args[which(args == "--exclude") + 1]
 
 exclude_samples <- if (nchar(exclude_str) > 0) unlist(strsplit(exclude_str, ",")) else character(0)
 
+dir.create(file.path(outdir, "filtered"), showWarnings = FALSE, recursive = TRUE)
+
 # ---- 过滤函数 ----
 filter_matrix <- function(file_path, label) {
   if (!file.exists(file_path)) return()
@@ -40,7 +42,7 @@ filter_matrix <- function(file_path, label) {
     mat$Length <- len_col
     mat <- mat[, c("Geneid", "Length", setdiff(colnames(mat), c("Geneid", "Length")))]
   }
-  outfile <- file.path(outdir, paste0(proj_id, "_", label, "_filtered.xls"))
+  outfile <- file.path(outdir, "filtered", paste0(proj_id, "_", label, "_filtered.xls"))
   write.table(mat, file = outfile, sep = "\t", quote = FALSE, row.names = FALSE)
   cat(sprintf("  ✓ %s_filtered → %s\n", label, outfile))
 }
@@ -69,13 +71,13 @@ if (length(exclude_samples) > 0) {
   samples <- samples[!samples$sample %in% exclude_samples, , drop = FALSE]
   cat(sprintf("sample_sheet: %d → %d 样本\n", nrow(samples) + length(exclude_samples), nrow(samples)))
 }
-write.csv(samples, file.path(outdir, "sample_sheet_filtered.csv"), row.names = FALSE, quote = FALSE)
+write.csv(samples, file.path(outdir, "filtered", "sample_sheet_filtered.csv"), row.names = FALSE, quote = FALSE)
 cat("  ✓ sample_sheet_filtered.csv 已保存\n")
 
 # 同时复制原始的 counts.txt.summary（若有）
 summary_file <- file.path(outdir, "counts.txt.summary")
 if (file.exists(summary_file)) {
-  file.copy(summary_file, file.path(outdir, "counts_filtered.txt.summary"), overwrite = TRUE)
+  file.copy(summary_file, file.path(outdir, "filtered", "counts_filtered.txt.summary"), overwrite = TRUE)
 }
 
 cat(">>> 样本过滤完成\n")
