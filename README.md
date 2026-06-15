@@ -89,14 +89,16 @@ project/
 ├── 01_CleanData/        # fastp 质控过滤后 FASTQ（fastq 模式输出）
 ├── 02_QC_Reports/       # FastQC + fastp + MultiQC 质控报告（fastq 模式输出）
 ├── 03_Alignment/        # HISAT2 比对 BAM 文件（fastq 模式输出）
-├── 04_Counts/           # 定量矩阵（counts 模式输入 / fastq 模式输出）
+├── 04_Counts/           # 定量矩阵及标准化表达量
+│   └── filtered/        # 过滤后定量矩阵（下游分析输入）
 ├── 05_DEG/              # 差异表达分析结果
 ├── 06_GO_KEGG/          # GO/KEGG 富集分析结果
 ├── 07_GSEA/             # GSEA 分析结果
-├── logs/                # 运行日志
 ├── total_mapping_summary.txt  # 比对率汇总（fastq 模式输出）
 └── Report.pdf           # 最终 PDF 报告
 ```
+
+> 流程完成后自动清理原始 `counts.txt`、`counts.txt.summary` 和 `logs/`，这些文件包含内部路径，不适合保留在输出目录中。定量信息已保留在 `04_Counts/filtered/` 中。
 
 ## 配置说明
 
@@ -142,11 +144,14 @@ sample4,Treatment1
 - `total_mapping_summary.txt` — 各样本比对率汇总
 
 **下游（counts/fastq 模式）：**
-- `04_Counts/` — counts/fpkm/tpm 定量矩阵（含过滤前后）
+- `04_Counts/` — counts/fpkm/tpm 标准化表达矩阵
+- `04_Counts/filtered/` — 样本过滤后的矩阵及样本表（下游分析输入，安全保留）
 - `05_DEG/` — 差异基因 CSV + 火山图 + 热图（PDF/PNG）
 - `06_GO_KEGG/` — GO/KEGG 富集结果 CSV + 富集图（PDF/PNG）
 - `07_GSEA/` — GSEA 分析结果
-- `Report.pdf` — 整合 PDF 报告
+- `Report.pdf` — 整合 PDF 报告（含表号和图号，带目录）
+
+> 原始 `counts.txt`、`counts.txt.summary` 和 `logs/` 在报告生成后自动删除（包含内部路径）。
 
 ## License
 
