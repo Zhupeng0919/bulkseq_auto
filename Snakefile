@@ -400,6 +400,10 @@ rule report:
         rm -f {PROJ}/04_Counts/counts.txt
         rm -f {PROJ}/04_Counts/counts.txt.summary
         rm -rf {_LOGS_DIR}
+        mkdir -p {PROJ}/00_Config
+        mv {PROJ}/total_mapping_summary.txt {PROJ}/00_Config/ 2>/dev/null || true
+        mv {PROJ}/Report.tex {PROJ}/00_Config/ 2>/dev/null || true
+        mv {PROJ}/config.yaml {PROJ}/00_Config/ 2>/dev/null || true
         """
 
 

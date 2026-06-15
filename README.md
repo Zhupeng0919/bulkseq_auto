@@ -94,8 +94,8 @@ project/
 ├── 05_DEG/              # 差异表达分析结果
 ├── 06_GO_KEGG/          # GO/KEGG 富集分析结果
 ├── 07_GSEA/             # GSEA 分析结果
-├── total_mapping_summary.txt  # 比对率汇总（fastq 模式输出）
-└── Report.pdf           # 最终 PDF 报告
+├── 00_Config/           # 配置及附属文件（报告后移入）
+├── Report.pdf           # 最终 PDF 报告
 ```
 
 > 流程完成后自动清理原始 `counts.txt`、`counts.txt.summary` 和 `logs/`，这些文件包含内部路径，不适合保留在输出目录中。定量信息已保留在 `04_Counts/filtered/` 中。
@@ -151,7 +151,7 @@ sample4,Treatment1
 - `07_GSEA/` — GSEA 分析结果
 - `Report.pdf` — 整合 PDF 报告（含表号和图号，带目录）
 
-> 原始 `counts.txt`、`counts.txt.summary` 和 `logs/` 在报告生成后自动删除（包含内部路径）。
+> 报告完成后，`config.yaml`、`total_mapping_summary.txt` 和 `Report.tex` 移入 `00_Config/`；原始 `counts.txt`、`counts.txt.summary` 和 `logs/` 自动删除（包含内部路径）。
 
 ## License
 
