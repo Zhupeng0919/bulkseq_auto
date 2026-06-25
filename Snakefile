@@ -9,6 +9,7 @@
 
 import os
 import csv
+import glob as _glob
 
 # ---- 从 configfile 加载配置 ----
 PROJ  = config["project_dir"]
@@ -33,8 +34,10 @@ _SPECIES_TO_GENOME = {"human": "GRCh38.p14", "mouse": "GRCm39", "rat": "GRCr8"}
 _GENOME_NAME = _SPECIES_TO_GENOME.get(SPECIES, "")
 
 if REF_ROOT and _GENOME_NAME:
-    IDX = config.get("reference", {}).get("index") or os.path.join(REF_ROOT, _GENOME_NAME, f"{_GENOME_NAME}_index")
-    GTF = config.get("reference", {}).get("gtf") or os.path.join(REF_ROOT, _GENOME_NAME, f"{_GENOME_NAME}.gtf")
+    IDX = config.get("reference", {}).get("index") or os.path.join(REF_ROOT, f"{_GENOME_NAME}_His2_refrence", f"{_GENOME_NAME}_index")
+    _gtf_d = os.path.join(REF_ROOT, _GENOME_NAME)
+    _gtf_candidates = _glob.glob(os.path.join(_gtf_d, "*.gtf"))
+    GTF = config.get("reference", {}).get("gtf") or (_gtf_candidates[0] if _gtf_candidates else "")
 else:
     IDX = config.get("reference", {}).get("index", "")
     GTF = config.get("reference", {}).get("gtf", "")
@@ -74,8 +77,8 @@ def find_input(in_candidates):
 
 def find_counts(wildcards):
     if MODE == "fastq":
-        return os.path.join(PROJ, "04_Counts", "counts.txt")
-    return find_input(["{PROJ}/04_Counts/counts.txt", "{PROJ}/counts.txt"])
+        return os.path.join(PROJ, "05_Counts", "counts.txt")
+    return find_input(["{PROJ}/05_Counts/counts.txt", "{PROJ}/counts.txt"])
 
 
 def find_sample_sheet(wildcards):
@@ -166,17 +169,17 @@ rule all:
 
 
 # ============================================================
-# 模块一：定量数据转换 (04_Counts)
+# 模块一：定量数据转换 (Counts)
 # ============================================================
 rule counts_convert:
     input:
         counts = find_counts
     output:
-        counts_xls = os.path.join(PROJ, "04_Counts", f"{PID}_counts.xls"),
-        fpkm_xls   = os.path.join(PROJ, "04_Counts", f"{PID}_fpkm.xls"),
-        tpm_xls    = os.path.join(PROJ, "04_Counts", f"{PID}_tpm.xls")
+        counts_xls = os.path.join(PROJ, "05_Counts", f"{PID}_counts.xls"),
+        fpkm_xls   = os.path.join(PROJ, "05_Counts", f"{PID}_fpkm.xls"),
+        tpm_xls    = os.path.join(PROJ, "05_Counts", f"{PID}_tpm.xls")
     params:
-        outdir = os.path.join(PROJ, "04_Counts"),
+        outdir = os.path.join(PROJ, "05_Counts"),
         sdir   = _SCRIPTS_DIR
     shell:
         """
@@ -189,22 +192,22 @@ rule counts_convert:
 
 
 # ============================================================
-# 模块 1.5：样本剔除 (04_Counts)
+# 模块 1.5：样本剔除 (Counts)
 # ============================================================
 rule filter_samples:
     """根据 exclude_samples 配置剔除离群样本"""
     input:
-        counts = os.path.join(PROJ, "04_Counts", f"{PID}_counts.xls"),
-        fpkm   = os.path.join(PROJ, "04_Counts", f"{PID}_fpkm.xls"),
-        tpm    = os.path.join(PROJ, "04_Counts", f"{PID}_tpm.xls"),
+        counts = os.path.join(PROJ, "05_Counts", f"{PID}_counts.xls"),
+        fpkm   = os.path.join(PROJ, "05_Counts", f"{PID}_fpkm.xls"),
+        tpm    = os.path.join(PROJ, "05_Counts", f"{PID}_tpm.xls"),
         sample = find_sample_sheet
     output:
-        counts_filt = os.path.join(PROJ, "04_Counts", "filtered", f"{PID}_counts_filtered.xls"),
-        fpkm_filt   = os.path.join(PROJ, "04_Counts", "filtered", f"{PID}_fpkm_filtered.xls"),
-        tpm_filt    = os.path.join(PROJ, "04_Counts", "filtered", f"{PID}_tpm_filtered.xls"),
-        sample_filt = os.path.join(PROJ, "04_Counts", "filtered", "sample_sheet_filtered.csv")
+        counts_filt = os.path.join(PROJ, "05_Counts", "filtered", f"{PID}_counts_filtered.xls"),
+        fpkm_filt   = os.path.join(PROJ, "05_Counts", "filtered", f"{PID}_fpkm_filtered.xls"),
+        tpm_filt    = os.path.join(PROJ, "05_Counts", "filtered", f"{PID}_tpm_filtered.xls"),
+        sample_filt = os.path.join(PROJ, "05_Counts", "filtered", "sample_sheet_filtered.csv")
     params:
-        outdir  = os.path.join(PROJ, "04_Counts"),
+        outdir  = os.path.join(PROJ, "05_Counts"),
         sdir    = _SCRIPTS_DIR,
         exclude = ",".join(EXCLUDE_SAMPLES) if EXCLUDE_SAMPLES else ""
     shell:
@@ -220,18 +223,18 @@ rule filter_samples:
 
 
 # ============================================================
-# 模块 1.6：批次效应校正 (04_Counts)
+# 模块 1.6：批次效应校正 (Counts)
 # ============================================================
 if BATCH_CORRECT:
     rule batch_correct:
         input:
-            tpm    = os.path.join(PROJ, "04_Counts", "filtered", f"{PID}_tpm_filtered.xls"),
-            sample = os.path.join(PROJ, "04_Counts", "filtered", "sample_sheet_filtered.csv")
+            tpm    = os.path.join(PROJ, "05_Counts", "filtered", f"{PID}_tpm_filtered.xls"),
+            sample = os.path.join(PROJ, "05_Counts", "filtered", "sample_sheet_filtered.csv")
         output:
-            tpm_bc = os.path.join(PROJ, "04_Counts", f"{PID}_tpm_batch_corrected.xls"),
-            done   = touch(os.path.join(PROJ, "04_Counts", ".batch_correct_done"))
+            tpm_bc = os.path.join(PROJ, "05_Counts", f"{PID}_tpm_batch_corrected.xls"),
+            done   = touch(os.path.join(PROJ, "05_Counts", ".batch_correct_done"))
         params:
-            outdir = os.path.join(PROJ, "04_Counts"),
+            outdir = os.path.join(PROJ, "05_Counts"),
             sdir   = _SCRIPTS_DIR
         shell:
             """
@@ -246,25 +249,25 @@ if BATCH_CORRECT:
 def _deg_inputs(wildcards):
     """返回 deg 规则的输入，当启用批次校正时添加依赖"""
     d = {
-        'counts': os.path.join(PROJ, "04_Counts", "filtered", f"{PID}_counts_filtered.xls"),
-        'sample': os.path.join(PROJ, "04_Counts", "filtered", "sample_sheet_filtered.csv"),
+        'counts': os.path.join(PROJ, "05_Counts", "filtered", f"{PID}_counts_filtered.xls"),
+        'sample': os.path.join(PROJ, "05_Counts", "filtered", "sample_sheet_filtered.csv"),
     }
     if BATCH_CORRECT:
-        d['batch_done'] = os.path.join(PROJ, "04_Counts", ".batch_correct_done")
+        d['batch_done'] = os.path.join(PROJ, "05_Counts", ".batch_correct_done")
     return d
 
 
 # ============================================================
-# 模块二：差异表达分析 (05_DEG)
+# 模块二：差异表达分析 (DEG)
 # ============================================================
 rule deg:
     input:
         unpack(_deg_inputs)
     output:
-        done    = os.path.join(PROJ, "05_DEG", ".deg_done"),
-        alldiff = os.path.join(PROJ, "05_DEG", f"{PID}_All_Diff.csv")
+        done    = os.path.join(PROJ, "06_DEG", ".deg_done"),
+        alldiff = os.path.join(PROJ, "06_DEG", f"{PID}_All_Diff.csv")
     params:
-        outdir    = os.path.join(PROJ, "05_DEG"),
+        outdir    = os.path.join(PROJ, "06_DEG"),
         sdir      = _SCRIPTS_DIR,
         comp_mode = COMPARISON_MODE,
         comps     = ",".join(COMPARISONS)
@@ -284,21 +287,21 @@ rule deg:
 
 
 # ============================================================
-# 模块三：GO / KEGG 富集 (06_GO_KEGG)
+# 模块三：GO / KEGG 富集 (GO_KEGG)
 # ============================================================
 if DO_GO_KEGG and len(COMPARISONS) > 0:
     rule go_kegg:
         input:
-            deg_done = os.path.join(PROJ, "05_DEG", ".deg_done")
+            deg_done = os.path.join(PROJ, "06_DEG", ".deg_done")
         output:
-            touch(os.path.join(PROJ, "06_GO_KEGG", ".gokegg_done"))
+            touch(os.path.join(PROJ, "07_GO_KEGG", ".gokegg_done"))
         params:
-            outdir = os.path.join(PROJ, "06_GO_KEGG"),
+            outdir = os.path.join(PROJ, "07_GO_KEGG"),
             comps  = COMPARISONS
         run:
             os.makedirs(params.outdir, exist_ok = True)
             for comp in params.comps:
-                diff_csv = os.path.join(PROJ, "05_DEG", f"{PID}_{comp}_Diff.csv")
+                diff_csv = os.path.join(PROJ, "06_DEG", f"{PID}_{comp}_Diff.csv")
                 shell("""
                     {{_RSCRIPT}} {0}/go_kegg.R \
                       --deg        {1} \
@@ -311,29 +314,29 @@ if DO_GO_KEGG and len(COMPARISONS) > 0:
 else:
     rule go_kegg:
         input:
-            deg_done = os.path.join(PROJ, "05_DEG", ".deg_done")
+            deg_done = os.path.join(PROJ, "06_DEG", ".deg_done")
         output:
-            touch(os.path.join(PROJ, "06_GO_KEGG", ".gokegg_done"))
+            touch(os.path.join(PROJ, "07_GO_KEGG", ".gokegg_done"))
         run:
-            os.makedirs(os.path.join(PROJ, "06_GO_KEGG"), exist_ok = True)
+            os.makedirs(os.path.join(PROJ, "07_GO_KEGG"), exist_ok = True)
 
 
 # ============================================================
-# 模块四：GSEA 分析 (07_GSEA)
+# 模块四：GSEA 分析 (GSEA)
 # ============================================================
 if DO_GSEA and len(COMPARISONS) > 0:
     rule gsea:
         input:
-            deg_done = os.path.join(PROJ, "05_DEG", ".deg_done")
+            deg_done = os.path.join(PROJ, "06_DEG", ".deg_done")
         output:
-            touch(os.path.join(PROJ, "07_GSEA", ".gsea_done"))
+            touch(os.path.join(PROJ, "08_GSEA", ".gsea_done"))
         params:
-            outdir = os.path.join(PROJ, "07_GSEA"),
+            outdir = os.path.join(PROJ, "08_GSEA"),
             comps  = COMPARISONS
         run:
             os.makedirs(params.outdir, exist_ok = True)
             for comp in params.comps:
-                diff_csv = os.path.join(PROJ, "05_DEG", f"{PID}_{comp}_Diff.csv")
+                diff_csv = os.path.join(PROJ, "06_DEG", f"{PID}_{comp}_Diff.csv")
                 shell("""
                     {{_RSCRIPT}} {0}/gsea.R \
                       --deg        {1} \
@@ -345,12 +348,12 @@ if DO_GSEA and len(COMPARISONS) > 0:
 else:
     rule gsea:
         input:
-            deg_done = os.path.join(PROJ, "05_DEG", ".deg_done")
+            deg_done = os.path.join(PROJ, "06_DEG", ".deg_done")
         output:
-            touch(os.path.join(PROJ, "07_GSEA", ".gsea_done"))
+            touch(os.path.join(PROJ, "08_GSEA", ".gsea_done"))
         run:
-            os.makedirs(os.path.join(PROJ, "07_GSEA"), exist_ok = True)
-            shell("touch {0}/SKIPPED".format(os.path.join(PROJ, "07_GSEA")))
+            os.makedirs(os.path.join(PROJ, "08_GSEA"), exist_ok = True)
+            shell("touch {0}/SKIPPED".format(os.path.join(PROJ, "08_GSEA")))
 
 
 # ============================================================
@@ -359,14 +362,14 @@ else:
 def _report_inputs(wildcards):
     """返回 report 规则的输入，优先使用批次校正后的 TPM"""
     d = {
-        'deg_done':  os.path.join(PROJ, "05_DEG", ".deg_done"),
-        'gokegg':    os.path.join(PROJ, "06_GO_KEGG", ".gokegg_done"),
-        'gsea_done': os.path.join(PROJ, "07_GSEA", ".gsea_done"),
+        'deg_done':  os.path.join(PROJ, "06_DEG", ".deg_done"),
+        'gokegg':    os.path.join(PROJ, "07_GO_KEGG", ".gokegg_done"),
+        'gsea_done': os.path.join(PROJ, "08_GSEA", ".gsea_done"),
     }
     if BATCH_CORRECT:
-        d['tpm'] = os.path.join(PROJ, "04_Counts", f"{PID}_tpm_batch_corrected.xls")
+        d['tpm'] = os.path.join(PROJ, "05_Counts", f"{PID}_tpm_batch_corrected.xls")
     else:
-        d['tpm'] = os.path.join(PROJ, "04_Counts", "filtered", f"{PID}_tpm_filtered.xls")
+        d['tpm'] = os.path.join(PROJ, "05_Counts", "filtered", f"{PID}_tpm_filtered.xls")
     return d
 
 
@@ -397,15 +400,35 @@ rule report:
           output_dir  = "{PROJ}",
           quiet = TRUE
         )'
-        rm -f {PROJ}/04_Counts/counts.txt
-        rm -f {PROJ}/04_Counts/counts.txt.summary
         rm -rf {_LOGS_DIR}
+        rm -f {PROJ}/05_Counts/.batch_correct_done
+        rm -f {PROJ}/06_DEG/.deg_done
+        rm -f {PROJ}/07_GO_KEGG/.gokegg_done
+        rm -f {PROJ}/08_GSEA/.gsea_done
         mkdir -p {PROJ}/00_Config
+        mv {PROJ}/05_Counts/counts.txt {PROJ}/00_Config/ 2>/dev/null || true
+        mv {PROJ}/05_Counts/counts.txt.summary {PROJ}/00_Config/ 2>/dev/null || true
         mv {PROJ}/total_mapping_summary.txt {PROJ}/00_Config/ 2>/dev/null || true
         mv {PROJ}/Report.tex {PROJ}/00_Config/ 2>/dev/null || true
         mv {PROJ}/config.yaml {PROJ}/00_Config/ 2>/dev/null || true
+        cp {PROJ}/05_Counts/filtered/{PID}_counts_filtered.xls {PROJ}/05_Counts/{PID}_counts.xls 2>/dev/null || true
+        cp {PROJ}/05_Counts/filtered/{PID}_fpkm_filtered.xls   {PROJ}/05_Counts/{PID}_fpkm.xls   2>/dev/null || true
+        cp {PROJ}/05_Counts/filtered/{PID}_tpm_filtered.xls    {PROJ}/05_Counts/{PID}_tpm.xls    2>/dev/null || true
+        rm -rf {PROJ}/05_Counts/filtered
+        rm -f {PROJ}/05_Counts/*_filtered.xls
+        rm -f {PROJ}/05_Counts/sample_sheet_filtered.csv
+        rm -f {PROJ}/08_GSEA/.done
+        # 创建 result/ 交付目录（去前缀）
+        mkdir -p {PROJ}/result
+        cp -r {PROJ}/05_Counts {PROJ}/result/Counts
+        cp -r {PROJ}/06_DEG   {PROJ}/result/DEG
+        cp -r {PROJ}/07_GO_KEGG {PROJ}/result/GO_KEGG
+        cp -r {PROJ}/08_GSEA  {PROJ}/result/GSEA
+        cp {PROJ}/sample_sheet.csv {PROJ}/result/
+        cp {PROJ}/Report.pdf {PROJ}/result/
         PROJ_NAME=$(basename {PROJ})
-        cd {PROJ} && zip -r ../${{PROJ_NAME}}_result.zip 04_Counts 05_DEG 06_GO_KEGG 07_GSEA sample_sheet.csv Report.pdf -x "04_Counts/counts.txt" "04_Counts/counts.txt.summary" 2>/dev/null || true
+        rm -f {PROJ}/../${{PROJ_NAME}}_result.zip
+        cd {PROJ} && zip -r ../${{PROJ_NAME}}_result.zip result/ 2>/dev/null || true
         """
 
 
@@ -418,7 +441,7 @@ if MODE == "fastq":
     CLEAN = os.path.join(PROJ, "01_CleanData")
     QC    = os.path.join(PROJ, "02_QC_Reports")
     ALIGN = os.path.join(PROJ, "03_Alignment")
-    COUNT = os.path.join(PROJ, "04_Counts")
+    COUNT = os.path.join(PROJ, "05_Counts")
 
     if not IDX:
         raise ValueError(

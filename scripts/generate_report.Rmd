@@ -84,7 +84,7 @@ if (species == "human") {
 short_name <- function(x) gsub("^[A-Z]\\d+_L\\d+_", "", x)
 
 # Load sample info (prefer filtered)
-sample_file <- file.path(proj_dir, "04_Counts", "filtered", "sample_sheet_filtered.csv")
+sample_file <- file.path(proj_dir, "05_Counts", "filtered", "sample_sheet_filtered.csv")
 if (!file.exists(sample_file)) {
   sample_file <- file.path(proj_dir, "sample_sheet.csv")
 }
@@ -94,13 +94,13 @@ if (has_sample_info) {
 }
 
 # Load TPM for PCA and correlation (prefer batch-corrected > filtered > raw)
-tpm_file <- file.path(proj_dir, "04_Counts", paste0(proj_id, "_tpm_batch_corrected.xls"))
+tpm_file <- file.path(proj_dir, "05_Counts", paste0(proj_id, "_tpm_batch_corrected.xls"))
 tpm_source <- "batch-corrected"
 if (!file.exists(tpm_file)) {
-  tpm_file <- file.path(proj_dir, "04_Counts", "filtered", paste0(proj_id, "_tpm_filtered.xls"))
+  tpm_file <- file.path(proj_dir, "05_Counts", "filtered", paste0(proj_id, "_tpm_filtered.xls"))
   tpm_source <- "filtered"
   if (!file.exists(tpm_file)) {
-    tpm_file <- file.path(proj_dir, "04_Counts", paste0(proj_id, "_tpm.xls"))
+    tpm_file <- file.path(proj_dir, "05_Counts", paste0(proj_id, "_tpm.xls"))
     tpm_source <- "raw"
   }
 }
@@ -157,9 +157,9 @@ cat("再通过 **featureCounts** 对每个基因进行 reads 计数定量。\n\n
 summary_file <- file.path(proj_dir, "total_mapping_summary.txt")
 has_summary <- file.exists(summary_file)
 
-fc_summary_file <- file.path(proj_dir, "04_Counts", "counts.txt.summary")
+fc_summary_file <- file.path(proj_dir, "05_Counts", "counts.txt.summary")
 if (!file.exists(fc_summary_file)) {
-  fc_summary_file <- file.path(proj_dir, "04_Counts", "filtered", "counts_filtered.txt.summary")
+  fc_summary_file <- file.path(proj_dir, "05_Counts", "filtered", "counts_filtered.txt.summary")
 }
 has_fc <- file.exists(fc_summary_file)
 
@@ -271,9 +271,9 @@ cat("计算步骤：先计算每个基因的 reads-per-kilobase (RPK)，再将 R
 ```
 
 ```{r counts-load}
-counts_file <- file.path(proj_dir, "04_Counts", "filtered", paste0(proj_id, "_counts_filtered.xls"))
+counts_file <- file.path(proj_dir, "05_Counts", "filtered", paste0(proj_id, "_counts_filtered.xls"))
 if (!file.exists(counts_file)) {
-  counts_file <- file.path(proj_dir, "04_Counts", paste0(proj_id, "_counts.xls"))
+  counts_file <- file.path(proj_dir, "05_Counts", paste0(proj_id, "_counts.xls"))
 }
 has_counts <- file.exists(counts_file)
 if (has_counts) {
@@ -453,7 +453,7 @@ if (has_sample_info) {
     cat("DESeq2 使用负二项分布模型对 counts 数据进行建模，通过 empirical Bayes 收缩估计离散度，")
     cat("并使用 Wald 检验评估每个基因在组间的表达差异显著性。\n\n")
     # Check if batch was used in DESeq2 design
-    sample_info_file <- file.path(proj_dir, "04_Counts", "filtered", "sample_sheet_filtered.csv")
+    sample_info_file <- file.path(proj_dir, "05_Counts", "filtered", "sample_sheet_filtered.csv")
     if (file.exists(sample_info_file)) {
       si <- read.csv(sample_info_file, stringsAsFactors = FALSE)
       if ("batch" %in% colnames(si)) {
@@ -465,7 +465,7 @@ if (has_sample_info) {
 ```
 
 ```{r deg-results, results='asis', fig.width=10, fig.height=6, out.width='\\textwidth', fig.cap="图 5-1: 差异基因统计柱状图。各比较组上调和下调基因的数量对比，红色柱表示上调 (UP)，蓝色柱表示下调 (DOWN)，横轴为基因数量，纵轴为比较组名称。"}
-deg_dir <- file.path(proj_dir, "05_DEG")
+deg_dir <- file.path(proj_dir, "06_DEG")
 has_deg_dir <- dir.exists(deg_dir)
 
 # Build per-comparison DEG summary
@@ -571,7 +571,7 @@ cat("- 显著性阈值：p.adjust < 0.05\n\n")
 ```
 
 ```{r enrich-per-comparison, results='asis', out.width='\\textwidth'}
-enrich_dir <- file.path(proj_dir, "06_GO_KEGG")
+enrich_dir <- file.path(proj_dir, "07_GO_KEGG")
 has_enrich_dir <- dir.exists(enrich_dir) && !file.exists(file.path(enrich_dir, "SKIPPED"))
 
 if (has_enrich_dir && length(comps_raw) > 0) {
@@ -640,8 +640,25 @@ if (has_enrich_dir && length(comps_raw) > 0) {
 
 # 7. GSEA 富集分析
 
+```{r gsea-method, results='asis'}
+cat("## 7.1 分析方法\n\n")
+cat("GSEA (Gene Set Enrichment Analysis) 使用 **clusterProfiler** 包的 GSEA 方法完成。")
+cat("以所有基因按 **log2FoldChange 降序排列** 作为预排序 (pre-ranked) 基因列表，")
+cat("采用 **fgsea** 算法进行快速基因集富集分析，评估每个功能基因集在排序列表两端的富集趋势。")
+cat("NES (Normalized Enrichment Score) > 0 表示该通路在比较组中整体上调，< 0 表示整体下调。\n\n")
+cat("**分析参数**：\n\n")
+cat("- 基因集大小范围: minGSSize = 10, maxGSSize = 500\n\n")
+cat("- 显著性阈值: p.adjust < 0.05 (通路全部输出，以此阈值判定显著)\n\n")
+cat("- 多重检验校正: Benjamini-Hochberg (BH) 方法\n\n")
+cat("- 置换检验: eps = 1e-10\n\n")
+cat("**分析类型**：\n\n")
+cat("- **GO BP**: Gene Ontology Biological Process，基于 SYMBOL ID 的 gseGO 分析\n\n")
+cat("- **KEGG**: KEGG 通路，SYMBOL → ENTREZID 转换后 gseKEGG 分析\n\n")
+cat("- **Hallmark**: MSigDB Hallmark 基因集（`msigdbr` collection = \"H\"），基于 SYMBOL 的通用 GSEA 分析\n\n")
+```
+
 ```{r gsea-per-comparison, results='asis', out.width='\\textwidth'}
-gsea_dir <- file.path(proj_dir, "07_GSEA")
+gsea_dir <- file.path(proj_dir, "08_GSEA")
 has_gsea <- dir.exists(gsea_dir) && !file.exists(file.path(gsea_dir, "SKIPPED"))
 
 gsea_types <- c("GO", "KEGG", "Hallmark")
@@ -649,6 +666,7 @@ gsea_labels <- c("GO BP", "KEGG", "Hallmark")
 
 if (has_gsea && length(comps_raw) > 0) {
   table_num <- 1
+  fig_num <- 1
   for (comp in comps_raw) {
     comp_label <- fmt_comparison(comp)
     cat(sprintf("\n## %s\n\n", comp_label))
@@ -669,19 +687,21 @@ if (has_gsea && length(comps_raw) > 0) {
 
       cat(sprintf("### %s (%d 通路)\n\n", elabel, nrow(gsea_res)))
 
-      top_gsea <- head(gsea_res[, c("ID", "NES", "p.adjust")], 10)
-      top_gsea$ID <- gsub("_", "\\\\_", top_gsea$ID)
+      top_gsea <- head(gsea_res[, c("Description", "NES", "p.adjust")], 10)
+      colnames(top_gsea) <- c("通路名称", "NES", "p.adjust")
       print(kable(top_gsea, row.names = FALSE, align = 'c', escape = FALSE,
                   caption = paste0("表 7-", table_num, ": ", comp_label, " GSEA ", elabel, " Top 10")))
       table_num <- table_num + 1
 
       if (file.exists(gsea_png_up)) {
         cat("\n")
-        cat(sprintf("\\reportfig{\\textwidth}{%s}{GSEA %s (上调): %s}\n\n", gsea_png_up, elabel, comp_label))
+        cat(sprintf("\\reportfig{\\textwidth}{%s}{图 7-%d: %s GSEA %s (上调)}\n\n", gsea_png_up, fig_num, comp_label, elabel))
+        fig_num <- fig_num + 1
       }
       if (file.exists(gsea_png_down)) {
         cat("\n")
-        cat(sprintf("\\reportfig{\\textwidth}{%s}{GSEA %s (下调): %s}\n\n", gsea_png_down, elabel, comp_label))
+        cat(sprintf("\\reportfig{\\textwidth}{%s}{图 7-%d: %s GSEA %s (下调)}\n\n", gsea_png_down, fig_num, comp_label, elabel))
+        fig_num <- fig_num + 1
       }
       cat("\n\n")
     }

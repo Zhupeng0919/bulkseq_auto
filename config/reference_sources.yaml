@@ -8,7 +8,9 @@
 #   genome_name — 基因组版本名
 #   fasta_url   — NCBI 基因组 FASTA 下载地址
 #   gtf_url     — NCBI 基因注释 GTF 下载地址
-#   output_dir  — 索引输出目录（最终产物为该目录下的 <genome_name>_index.*.ht2 + <genome_name>.gtf）
+#   output_dir  — 参考文件根目录，产物布局:
+#       {output_dir}/                           — FASTA、GTF 等原始文件
+#       {output_dir}_His2_refrence/             — HISAT2 索引 + exons.txt + splice_sites.txt
 # ============================================================
 
 reference_root: "/home/zhuzp/reference"

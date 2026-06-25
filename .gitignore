@@ -33,3 +33,6 @@ Rplots.pdf
 .vscode/
 *.swp
 *.swo
+
+# OSS config with credentials
+config/oss_config.yaml

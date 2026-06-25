@@ -57,7 +57,7 @@ cat(sprintf("基因数: %d\n", length(gene_list)))
 gsea_params <- list(
   minGSSize     = 10,
   maxGSSize     = 500,
-  pvalueCutoff  = 0.05,
+  pvalueCutoff  = 1,
   pAdjustMethod = "BH",
   eps           = 1e-10,
   by            = "fgsea",

@@ -44,10 +44,10 @@ snakemake --configfile /path/to/project/config.yaml --cores 16 -R go_kegg report
 <项目目录>/
   config.yaml              # 项目配置（物种、模式、阈值、参考路径）
   sample_sheet.csv          # 样本分组信息（sample, group）
-  04_Counts/                # 定量结果（counts, FPKM, TPM）
-  05_DEG/                   # 差异分析结果 + 火山图/热图
-  06_GO_KEGG/               # GO/KEGG 富集结果 + 组合图
-  07_GSEA/                  # GSEA 结果（可选）
+  05_Counts/                # 定量结果（counts, FPKM, TPM）
+  06_DEG/                   # 差异分析结果 + 火山图/热图
+  07_GO_KEGG/               # GO/KEGG 富集结果 + 组合图
+  08_GSEA/                  # GSEA 结果（可选）
   Report.pdf                # 最终 PDF 报告
 ```
 

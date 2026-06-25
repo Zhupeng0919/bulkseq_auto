@@ -41,7 +41,7 @@ clean_colnames <- gsub("^[A-Z]\\d+_L\\d+_", "", clean_colnames)
 colnames(count_matrix) <- clean_colnames
 
 # 按字母顺序排列列
-count_matrix <- count_matrix[, gtools::mixedorder(colnames(count_matrix)), drop = FALSE]
+count_matrix <- count_matrix[, stringr::str_sort(colnames(count_matrix), numeric = TRUE), drop = FALSE]
 
 # ---- 计算 FPKM / TPM ----
 kb <- counts$Length / 1000

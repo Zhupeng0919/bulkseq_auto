@@ -76,7 +76,7 @@ reference:
 
 | 模式 | 起点 | 输入要求 | 运行内容 |
 |------|------|----------|----------|
-| `counts` | 定量矩阵 | `04_Counts/counts.txt` | 定量转换 → 样本过滤 → DEG → GO/KEGG → 报告 |
+| `counts` | 定量矩阵 | `05_Counts/counts.txt` | 定量转换 → 样本过滤 → DEG → GO/KEGG → 报告 |
 | `fastq` | 原始测序数据 | `RawData/*.fq.gz` | fastp → FastQC → HISAT2 → featureCounts → ... → 报告 |
 
 ## 项目目录结构
@@ -89,11 +89,11 @@ project/
 ├── 01_CleanData/        # fastp 质控过滤后 FASTQ（fastq 模式输出）
 ├── 02_QC_Reports/       # FastQC + fastp + MultiQC 质控报告（fastq 模式输出）
 ├── 03_Alignment/        # HISAT2 比对 BAM 文件（fastq 模式输出）
-├── 04_Counts/           # 定量矩阵及标准化表达量
+├── 05_Counts/           # 定量矩阵及标准化表达量
 │   └── filtered/        # 过滤后定量矩阵（下游分析输入）
-├── 05_DEG/              # 差异表达分析结果
-├── 06_GO_KEGG/          # GO/KEGG 富集分析结果
-├── 07_GSEA/             # GSEA 分析结果
+├── 06_DEG/              # 差异表达分析结果
+├── 07_GO_KEGG/          # GO/KEGG 富集分析结果
+├── 08_GSEA/             # GSEA 分析结果
 ├── 00_Config/           # 配置及附属文件（报告后移入）
 ├── Report.pdf           # 最终 PDF 报告
 ```
@@ -144,14 +144,14 @@ sample4,Treatment1
 - `total_mapping_summary.txt` — 各样本比对率汇总
 
 **下游（counts/fastq 模式）：**
-- `04_Counts/` — counts/fpkm/tpm 标准化表达矩阵
-- `04_Counts/filtered/` — 样本过滤后的矩阵及样本表（下游分析输入，安全保留）
-- `05_DEG/` — 差异基因 CSV + 火山图 + 热图（PDF/PNG）
-- `06_GO_KEGG/` — GO/KEGG 富集结果 CSV + 富集图（PDF/PNG）
-- `07_GSEA/` — GSEA 分析结果
+- `05_Counts/` — counts/fpkm/tpm 标准化表达矩阵
+- `05_Counts/filtered/` — 样本过滤后的矩阵及样本表（下游分析输入，安全保留）
+- `06_DEG/` — 差异基因 CSV + 火山图 + 热图（PDF/PNG）
+- `07_GO_KEGG/` — GO/KEGG 富集结果 CSV + 富集图（PDF/PNG）
+- `08_GSEA/` — GSEA 分析结果
 - `Report.pdf` — 整合 PDF 报告（含表号和图号，带目录）
 
-> 报告完成后，`config.yaml`、`total_mapping_summary.txt` 和 `Report.tex` 移入 `00_Config/`；原始 `counts.txt`、`counts.txt.summary` 和 `logs/` 自动删除（包含内部路径）。输出目录、`sample_sheet.csv` 和 `Report.pdf` 自动打包为 `{项目名}_result.zip`。
+> 报告完成后，`config.yaml`、`total_mapping_summary.txt` 和 `Report.tex` 移入 `00_Config/`；哨兵文件和 `logs/` 自动清理。在项目目录下创建 `result/` 文件夹，将输出去除数字前缀后放入（`Counts/`、`DEG/`、`GO_KEGG/`、`GSEA/`），连同 `sample_sheet.csv` 和 `Report.pdf` 一并打包为 `{项目名}_result.zip`。
 
 ## License
 

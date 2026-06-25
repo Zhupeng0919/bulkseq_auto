@@ -64,8 +64,9 @@ if [ -z "$INDEX_PREFIX" ] || [ -z "$GTF_FILE" ]; then
         *)      echo "错误: 未知物种 '$SPECIES'"; exit 1 ;;
     esac
     REF_DIR="${REF_ROOT}/${GENOME_NAME}"
-    [ -z "$INDEX_PREFIX" ] && INDEX_PREFIX="${REF_DIR}/${GENOME_NAME}_index"
-    [ -z "$GTF_FILE" ]     && GTF_FILE="${REF_DIR}/${GENOME_NAME}.gtf"
+    IDX_DIR="${REF_ROOT}/${GENOME_NAME}_His2_refrence"
+    [ -z "$INDEX_PREFIX" ] && INDEX_PREFIX="${IDX_DIR}/${GENOME_NAME}_index"
+    [ -z "$GTF_FILE" ]     && GTF_FILE=$(ls "${REF_DIR}"/*.gtf 2>/dev/null | head -1)
     echo "自动推导参考路径:"
     echo "  索引: $INDEX_PREFIX"
     echo "  GTF:  $GTF_FILE"
@@ -86,7 +87,7 @@ fi
 CLEAN_DIR="${PROJECT_DIR}/01_CleanData"
 QC_DIR="${PROJECT_DIR}/02_QC_Reports"
 ALIGN_DIR="${PROJECT_DIR}/03_Alignment"
-COUNT_DIR="${PROJECT_DIR}/04_Counts"
+COUNT_DIR="${PROJECT_DIR}/05_Counts"
 LOG_DIR="${PROJECT_DIR}/logs"
 SUMMARY_FILE="${PROJECT_DIR}/total_mapping_summary.txt"
 

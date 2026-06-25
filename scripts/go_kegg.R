@@ -95,8 +95,8 @@ run_enrichment <- function(gene_list, direction_label) {
     OrgDb         = OrgDb,
     ont           = "ALL",
     pAdjustMethod = "BH",
-    pvalueCutoff  = p_cut,
-    qvalueCutoff  = p_cut,
+    pvalueCutoff  = 1,
+    qvalueCutoff  = 1,
     readable      = TRUE
   )
 
@@ -105,13 +105,13 @@ run_enrichment <- function(gene_list, direction_label) {
     write.csv(as.data.frame(go_results), go_file, row.names = FALSE)
     cat(sprintf("  ✓ GO 富集: %d 条通路\n", nrow(go_results)))
   } else {
-    cat("  ! GO 无显著富集结果\n")
+    cat("  ! GO 无富集结果\n")
   }
 
   # KEGG 富集
   kegg_results <- tryCatch(
     enrichKEGG(gene = entrz, organism = kegg_org,
-               pvalueCutoff = p_cut, qvalueCutoff = p_cut),
+               pvalueCutoff = 1, qvalueCutoff = 1),
     error = function(e) NULL
   )
 
@@ -120,7 +120,7 @@ run_enrichment <- function(gene_list, direction_label) {
     write.csv(as.data.frame(kegg_results), kegg_file, row.names = FALSE)
     cat(sprintf("  ✓ KEGG 富集: %d 条通路\n", nrow(kegg_results)))
   } else {
-    cat("  ! KEGG 无显著富集结果\n")
+    cat("  ! KEGG 无富集结果\n")
   }
 
   # ---- 绘图：组合柱状图（Category 标签 + Count 气泡 + -log10(p.adjust) 柱）----

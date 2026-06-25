@@ -263,7 +263,7 @@ for (comp_name in names(comparisons)) {
 
   p_volcano <- ggplot(res_df, aes(x = log2FoldChange, y = -log10(padj), color = change)) +
     geom_point(alpha = 0.4, size = 1.5) +
-    scale_color_manual(values = c("UP" = "#d73027", "DOWN" = "#4575b4", "NOT" = "grey80")) +
+    scale_color_manual(values = c("UP" = "#ef8a62", "DOWN" = "#67a9cf", "NOT" = "grey80")) +
     geom_vline(xintercept = c(-lfc_cut, lfc_cut), lty = 4, col = "black", lwd = 0.8) +
     geom_hline(yintercept = -log10(p_cut), lty = 4, col = "black", lwd = 0.8) +
     geom_text_repel(data = top10, aes(label = Symbol), size = 3, max.overlaps = 50, box.padding = 0.5) +
@@ -312,7 +312,7 @@ for (comp_name in names(comparisons)) {
                             annotation_col = annotation_col,
                             fontsize = 6,
                             fontsize_col = 5,
-                            color = colorRampPalette(c("navy", "white", "firebrick3"))(100),
+                            color = colorRampPalette(c("#67a9cf", "white", "#ef8a62"))(100),
                             cluster_cols = FALSE,
                             cluster_rows = TRUE,
                             main = "")
