@@ -153,6 +153,24 @@ sample4,Treatment1
 
 > 报告完成后，`config.yaml`、`total_mapping_summary.txt` 和 `Report.tex` 移入 `00_Config/`；哨兵文件和 `logs/` 自动清理。在项目目录下创建 `result/` 文件夹，将输出去除数字前缀后放入（`Counts/`、`DEG/`、`GO_KEGG/`、`GSEA/`），连同 `sample_sheet.csv` 和 `Report.pdf` 一并打包为 `{项目名}_result.zip`。
 
+## Citation
+
+If you use bulkseq_auto in your research, please cite:
+
+> Zhu P. (2025). bulkseq_auto v0.5.0. Zenodo. https://doi.org/10.5281/zenodo.21426891
+
+BibTeX:
+
+```bibtex
+@software{zhu2025bulkseq_auto,
+  author       = {Zhu, Peng},
+  title        = {bulkseq\_auto: Automated bulk RNA-seq analysis pipeline},
+  year         = 2025,
+  version      = {v0.5.0},
+  doi          = {10.5281/zenodo.21426891},
+  url          = {https://github.com/Zhupeng0919/bulkseq_auto}
+}
+
 ## License
 
 GPL-3.0
